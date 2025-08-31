@@ -33,8 +33,8 @@ Un cas concret : alerter une personne aveugle si sa **canne blanche** sort de so
 - Dans le champ *URL de gestionnaire de cartes supplémentaires*, ajouter :  
 https://raw.githubusercontent.com/espressif/arduino-esp32/refs/heads/gh-pages/package_esp32_dev_index.json
 
-- Aller dans **Outils → Type de carte → Gestionnaire de cartes**.  
-- Rechercher **ESP32** et installer le package fourni par *Espressif Systems*.  
+- Aller dans **Tools → Board Type → Boards Manager**.  
+- Rechercher **ESP32** et installer la version 2.0.17 du package fourni par *Espressif Systems*. !!! ATTENTION !!! Les versions plus récentes (>=3.0) ne sont pas compatibles !!!
 
 ### 3. Installer les bibliothèques nécessaires
 - Télécharger la bibliothèque TWatch depuis [https://github.com/Xinyuan-LilyGO/TTGO_TWATCH_Library](https://github.com/Xinyuan-LilyGO/TTGO_TWatch_Library/archive/refs/heads/master.zip)
