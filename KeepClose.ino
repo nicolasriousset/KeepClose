@@ -28,6 +28,10 @@ bool startsWithIgnoreCase(const std::string& str, const std::string& prefix) {
   return true;
 }
 
+float estimateDistance(int txPower, int rssi, float n = 2.0) {
+  return pow(10.0, ((float)txPower - (float)rssi) / (10.0 * n));
+}
+
 class ScanCallbacks : public NimBLEScanCallbacks {
   void onResult(const NimBLEAdvertisedDevice* advertisedDevice) override {
 
@@ -36,8 +40,6 @@ class ScanCallbacks : public NimBLEScanCallbacks {
     Serial.println("");
     if (!advertisedDevice->haveName() || !startsWithIgnoreCase(advertisedDevice->getName(), "Holy")) {
       // Ignore devices that are not named 'Holy-IOT'
-      Serial.print("Device found, but not Holy-IOT :(");
-      Serial.println("");
       return;
     }
     Serial.print("********************* BALISE TROUVEEEEEEEE *******************************");
@@ -61,6 +63,11 @@ class ScanCallbacks : public NimBLEScanCallbacks {
                       ENDIAN_CHANGE_U16(oBeacon.getMinor()),
                       oBeacon.getProximityUUID().toString().c_str(),
                       oBeacon.getSignalPower());
+
+        int txPower = oBeacon.getSignalPower();
+        int rssi = advertisedDevice->getRSSI();
+        float distance = estimateDistance(txPower, rssi);
+        Serial.printf("Estimation de la distance : %.2fm\n", distance);
       } else {
         Serial.println("Found another manufacturers beacon!");
         Serial.printf("strManufacturerData: %d ", strManufacturerData.length());
