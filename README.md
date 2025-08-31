@@ -37,15 +37,13 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/refs/heads/gh-pages/pa
 - Rechercher **ESP32** et installer le package fourni par *Espressif Systems*.  
 
 ### 3. Installer les bibliothèques nécessaires
-Dans l’IDE Arduino, aller dans **Croquis → Inclure une bibliothèque → Gérer les bibliothèques** et installer :  
-- `TFT_eSPI` (gestion de l’écran de la T-Watch).  
-- `TTGO TWatch Library` (gestion matérielle de la montre).  
-- `ArduinoBLE` ou `NimBLE-Arduino` (gestion du Bluetooth Low Energy).  
+- Télécharger la bibliothèque TWatchdepuis unzip depuis https://github.com/Xinyuan-LilyGO/TTGO_TWATCH_Library
+- Dans l’IDE Arduino, aller dans **Sketch → Include library → Add .ZIP library** et installer la librairie
 
 ### 4. Sélectionner la carte
-- Dans **Outils → Type de carte**, choisir :  
+- Dans **Tools → Board**, choisir :  
 
-ESP32 Dev Module
+ESP32 > TTGO T-Watch
 
 - Sélectionner le bon port série (USB) correspondant à la montre.  
 
