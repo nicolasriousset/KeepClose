@@ -3,6 +3,7 @@
 #include <NimBLEAdvertisedDevice.h>
 #include "NimBLEEddystoneTLM.h"
 #include "NimBLEBeacon.h"
+#include <cctype>
 
 TTGOClass* ttgo;
 NimBLEScan* pBLEScan;
@@ -17,13 +18,30 @@ lv_obj_t* label_btn1 = NULL;
 
 int scanTime = 5 * 1000;  // In milliseconds
 
+bool startsWithIgnoreCase(const std::string& str, const std::string& prefix) {
+  if (str.size() < prefix.size()) return false;
+  for (size_t i = 0; i < prefix.size(); i++) {
+    if (std::tolower((unsigned char)str[i]) != std::tolower((unsigned char)prefix[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 class ScanCallbacks : public NimBLEScanCallbacks {
   void onResult(const NimBLEAdvertisedDevice* advertisedDevice) override {
-    if (advertisedDevice->haveName()) {
-      Serial.print("Device name: ");
-      Serial.println(advertisedDevice->getName().c_str());
+
+    Serial.print("Device name: ");
+    Serial.println(advertisedDevice->getName().c_str());
+    Serial.println("");
+    if (!advertisedDevice->haveName() || !startsWithIgnoreCase(advertisedDevice->getName(), "Holy")) {
+      // Ignore devices that are not named 'Holy-IOT'
+      Serial.print("Device found, but not Holy-IOT :(");
       Serial.println("");
+      return;
     }
+    Serial.print("********************* BALISE TROUVEEEEEEEE *******************************");
+    Serial.println("");
 
     if (advertisedDevice->haveServiceUUID()) {
       NimBLEUUID devUUID = advertisedDevice->getServiceUUID();
