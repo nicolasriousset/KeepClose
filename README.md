@@ -51,7 +51,7 @@ ESP32 > TTGO T-Watch
 - Charger le programme d'exemple depuis File > Examples > TTGO Watch Library > LVGL > Lvgl_Button
 - Ouvrir le fichier config.h
 - décommenter la ligne #define LILYGO_WATCH_2020_V3
-- Cliquer sur le bouton "Upload"
+- Cliquer sur le bouton "Upload",leprogramme devrait êtretéléchargé sur lamontre et fonctionnel.
 
 ### 6. Compiler et téléverser
 - Ouvrir le projet `KeepClose.ino`.  
