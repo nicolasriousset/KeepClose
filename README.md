@@ -47,7 +47,13 @@ ESP32 > TTGO T-Watch
 
 - Sélectionner le bon port série (USB) correspondant à la montre.  
 
-### 5. Compiler et téléverser
+### 5. Tester le paramétrage avec un des projets d'exemple
+- Charger le programme d'exemple depuis File > Examples > TTGO Watch Library > LVGL > Lvgl_Button
+- Ouvrir le fichier config.h
+- décommenter la ligne #define LILYGO_WATCH_2020_V3
+- Cliquer sur le bouton "Upload"
+
+### 6. Compiler et téléverser
 - Ouvrir le projet `KeepClose.ino`.  
 - Cliquer sur **✔️ Vérifier** pour compiler.  
 - Cliquer sur **→ Téléverser** pour envoyer le code à la montre.  
