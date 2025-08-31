@@ -37,7 +37,7 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/refs/heads/gh-pages/pa
 - Rechercher **ESP32** et installer le package fourni par *Espressif Systems*.  
 
 ### 3. Installer les bibliothèques nécessaires
-- Télécharger la bibliothèque TWatchdepuis unzip depuis https://github.com/Xinyuan-LilyGO/TTGO_TWATCH_Library
+- Télécharger la bibliothèque TWatch depuis [https://github.com/Xinyuan-LilyGO/TTGO_TWATCH_Library]([url](https://github.com/Xinyuan-LilyGO/TTGO_TWatch_Library/archive/refs/heads/master.zip))
 - Dans l’IDE Arduino, aller dans **Sketch → Include library → Add .ZIP library** et installer la librairie
 
 ### 4. Sélectionner la carte
