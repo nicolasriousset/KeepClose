@@ -8,15 +8,19 @@
 TTGOClass* ttgo;
 NimBLEScan* pBLEScan;
 bool beaconFound = false;
+float beaconDistance = -1;
+bool mustRefreshDisplay = false;
+unsigned long lastScanTime = 0;
+unsigned long lastReviewTime = 0;
+const unsigned long SCAN_INTERVAL = 5000;  // 5 secondes en millisecondes
+const int SCAN_DURATION = 3000;            // Durée du scan en secondes
 
-
-int lastRSSI = 0;
-lv_obj_t* label_btn1 = NULL;
+lv_obj_t* label_distance = NULL;
 
 
 #define ENDIAN_CHANGE_U16(x) ((((x)&0xFF00) >> 8) + (((x)&0xFF) << 8))
 
-int scanTime = 5 * 1000;  // In milliseconds
+
 
 bool startsWithIgnoreCase(const std::string& str, const std::string& prefix) {
   if (str.size() < prefix.size()) return false;
@@ -35,15 +39,13 @@ float estimateDistance(int txPower, int rssi, float n = 2.0) {
 class ScanCallbacks : public NimBLEScanCallbacks {
   void onResult(const NimBLEAdvertisedDevice* advertisedDevice) override {
 
-    Serial.print("Device name: ");
-    Serial.println(advertisedDevice->getName().c_str());
-    Serial.println("");
     if (!advertisedDevice->haveName() || !startsWithIgnoreCase(advertisedDevice->getName(), "Holy")) {
       // Ignore devices that are not named 'Holy-IOT'
       return;
     }
-    Serial.print("********************* BALISE TROUVEEEEEEEE *******************************");
-    Serial.println("");
+    Serial.print("Balise détectée: ");
+    Serial.print(advertisedDevice->getName().c_str());
+    Serial.println();
 
     if (advertisedDevice->haveServiceUUID()) {
       NimBLEUUID devUUID = advertisedDevice->getServiceUUID();
@@ -66,8 +68,8 @@ class ScanCallbacks : public NimBLEScanCallbacks {
 
         int txPower = oBeacon.getSignalPower();
         int rssi = advertisedDevice->getRSSI();
-        float distance = estimateDistance(txPower, rssi);
-        Serial.printf("Estimation de la distance : %.2fm\n", distance);
+        beaconDistance = estimateDistance(txPower, rssi);
+        Serial.printf("Estimation de la distance : %.2fm\n", beaconDistance);
       } else {
         Serial.println("Found another manufacturers beacon!");
         Serial.printf("strManufacturerData: %d ", strManufacturerData.length());
@@ -101,6 +103,12 @@ class ScanCallbacks : public NimBLEScanCallbacks {
       }
     }
   }
+
+  void onScanEnd(const NimBLEScanResults& scanResults, int reason) override {
+    Serial.printf("End of scan, devices found : %d\n", scanResults.getCount());
+    updateDisplay();
+  }
+
 } scanCallbacks;
 
 void initNimBLE() {
@@ -124,40 +132,45 @@ void setup() {
   ttgo->motor_begin();
   ttgo->lvgl_begin();
 
-  // Bouton 1
-  lv_obj_t* btn1 = lv_btn_create(lv_scr_act(), NULL);
-  lv_obj_set_event_cb(btn1, event_handler);
-  lv_obj_align(btn1, NULL, LV_ALIGN_CENTER, 0, -40);
-  label_btn1 = lv_label_create(btn1, NULL);
-  lv_label_set_text(label_btn1, "Button");
-
-  // Bouton 2
-  lv_obj_t* btn2 = lv_btn_create(lv_scr_act(), NULL);
-  lv_obj_set_event_cb(btn2, event_handler);
-  lv_obj_align(btn2, NULL, LV_ALIGN_CENTER, 0, 40);
-  lv_btn_set_checkable(btn2, true);
-  lv_btn_toggle(btn2);
-  lv_btn_set_fit2(btn2, LV_FIT_NONE, LV_FIT_TIGHT);
-  lv_obj_t* label2 = lv_label_create(btn2, NULL);
-  lv_label_set_text(label2, "Toggled");
+  // Label pour la distance ou le smiley
+  label_distance = lv_label_create(lv_scr_act(), NULL);    
+  lv_obj_set_style_local_text_font(label_distance, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, &lv_font_montserrat_28);
+  updateDisplay();  
 }
 
-static void event_handler(lv_obj_t* obj, lv_event_t event) {
-  if (event == LV_EVENT_CLICKED) {
-    Serial.printf("Clicked\n");
-    ttgo->motor->onec();
-    NimBLEScanResults foundDevices = pBLEScan->getResults(scanTime, false);
-    Serial.print("Devices found: ");
-    Serial.println(foundDevices.getCount());
-    Serial.println("Scan done!");
-    pBLEScan->clearResults();  // del
-  } else if (event == LV_EVENT_VALUE_CHANGED) {
-    Serial.printf("Toggled\n");
+void updateDisplay() {
+  if (beaconDistance >= 1) {
+    lv_label_set_text_fmt(label_distance, "a %d m", (int)beaconDistance);
+    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);  
+  } else if (beaconDistance > 0) {
+    lv_label_set_text_fmt(label_distance, "a %d cm", (int)(beaconDistance * 100.0));
+    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);  
+  } else {    
+    lv_label_set_text(label_distance, "Recherche...");
+    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);  
   }
 }
+
+void startBeaconScan() {
+  Serial.println("=== DÉBUT DU SCAN ===");
+  beaconFound = false;
+  lastScanTime = millis();
+
+  pBLEScan->start(SCAN_DURATION);
+}
+
 
 void loop() {
   lv_task_handler();
 
-  delay(5);
+  unsigned long currentTime = millis();
+
+  if (!pBLEScan->isScanning()) {
+    // Vérifier si il est temps de lancer un nouveau scan
+    if (currentTime - lastScanTime >= SCAN_INTERVAL) {
+      startBeaconScan();
+    }
+  }
+
+  delay(100);
 }
