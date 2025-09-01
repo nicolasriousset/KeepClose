@@ -40,6 +40,35 @@ float estimateDistance(int txPower, float rssi, float n = 2.0) {
   return pow(10.0, ((float)txPower - rssi) / (10.0 * n));
 }
 
+/** Calculer uen moyenne des n dernières valeurs,
+ afin de réduire les anomalies lors de l'estimation de la distance de la balise*/
+class MovingAverage {
+private:
+  static const int BUFFER_SIZE = 3;
+  float buffer[BUFFER_SIZE] = { 0 };
+  int index = 0;
+  bool filled = false;
+
+public:
+  float addValue(float value) {
+    buffer[index] = value;
+    index = (index + 1) % BUFFER_SIZE;
+    if (!filled && index == 0) filled = true;
+
+    float sum = 0;
+    int count = filled ? BUFFER_SIZE : index;
+    for (int i = 0; i < count; i++) {
+      sum += buffer[i];
+    }
+    return sum / count;
+  }
+
+  void reset() {
+    index = 0;
+    filled = false;
+  }
+} averager;
+
 class ScanCallbacks : public NimBLEScanCallbacks {
   void onResult(const NimBLEAdvertisedDevice* advertisedDevice) override {
 
@@ -65,7 +94,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
                       oBeacon.getSignalPower());
 
         int txPower = oBeacon.getSignalPower();
-        float rssi = advertisedDevice->getRSSI();
+        float rssi = averager.addValue(advertisedDevice->getRSSI());
         beaconDistance = estimateDistance(txPower, rssi);
         Serial.printf("Estimation de la distance : %.2fm\n", beaconDistance);
       }
@@ -111,30 +140,30 @@ void startBeaconScan() {
 }
 
 void handleButtonPress() {
-    if (screenOn) {
-        // Si l'écran est allumé, le mettre en veille
-        turnOffScreen();
-    } else {
-        // Si l'écran est éteint, l'allumer
-        turnOnScreen();
-    }
-    lastActivityTime = millis();
+  if (screenOn) {
+    // Si l'écran est allumé, le mettre en veille
+    turnOffScreen();
+  } else {
+    // Si l'écran est éteint, l'allumer
+    turnOnScreen();
+  }
+  lastActivityTime = millis();
 }
 
 void turnOnScreen() {
-    ttgo->openBL(); // Active le rétroéclairage
-    ttgo->displayWakeup(); // Réveille l'écran
-       
-    screenOn = true;
-    Serial.println("Écran allumé");
+  ttgo->openBL();         // Active le rétroéclairage
+  ttgo->displayWakeup();  // Réveille l'écran
+
+  screenOn = true;
+  Serial.println("Écran allumé");
 }
 
 void turnOffScreen() {
-    ttgo->closeBL(); // Éteint le rétroéclairage
-    ttgo->displaySleep(); // Met l'écran en veille
-    
-    screenOn = false;
-    Serial.println("Écran éteint");
+  ttgo->closeBL();       // Éteint le rétroéclairage
+  ttgo->displaySleep();  // Met l'écran en veille
+
+  screenOn = false;
+  Serial.println("Écran éteint");
 }
 
 void setup() {
@@ -188,10 +217,9 @@ void loop() {
     ttgo->power->clearIRQ();
   }
 
-   if (screenOn && (millis() - lastActivityTime > SCREEN_TIMEOUT)) {
-        turnOffScreen();
-    }  
+  if (screenOn && (millis() - lastActivityTime > SCREEN_TIMEOUT)) {
+    turnOffScreen();
+  }
 
   delay(100);
 }
-
