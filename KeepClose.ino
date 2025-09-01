@@ -20,9 +20,9 @@ const float UNKNOWN = -1.0;
 float beaconDistance = UNKNOWN;
 unsigned long lastDetectionTime = 0;
 unsigned long lastScanTime = 0;
-const unsigned long SCAN_INTERVAL = 5000;                         // Intervalle de scan en millisecondes
-const int SCAN_DURATION = 1000;                                   // Durée du scan en milisecondes
-const int WARNING_DISTANCE = 10;                          // distance de la balise à partir de laquelle on fait vibrer la montre
+const unsigned long SCAN_INTERVAL = 5000;         // Intervalle de scan en millisecondes
+const int SCAN_DURATION = 1000;                   // Durée du scan en milisecondes
+const int WARNING_DISTANCE = 10;                  // distance de la balise à partir de laquelle on fait vibrer la montre
 const int ALARM_DISTANCE = 2 * WARNING_DISTANCE;  // distance de la balise à partir de laquelle on fait sonner la montre
 bool irq = false;
 bool screenOn = true;
@@ -120,7 +120,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
         float rssi = averager.addValue(advertisedDevice->getRSSI());
         beaconDistance = estimateDistance(txPower, rssi);
         Serial.printf("Estimation de la distance : %.2fm\n", beaconDistance);
-        updateState(beaconDistance);        
+        updateState(beaconDistance);
       }
       return;
     }
@@ -160,6 +160,7 @@ char* getStateLabel(State state) {
 }
 
 void updateState(float beaconDistance) {
+  State initialState = state;
   switch (state) {
     case WAITING:
       if (beaconDistance < WARNING_DISTANCE) {
@@ -174,17 +175,21 @@ void updateState(float beaconDistance) {
         state = WARNING;
         turnOnScreen();
       }
-      break;    
+      break;
     case WARNING:
     case ALARM:
       if (beaconDistance < WARNING_DISTANCE) {
         state = GUARDING;
-      } else if (beaconDistance < ALARM_DISTANCE ) {
+      } else if (beaconDistance < ALARM_DISTANCE) {
         state = WARNING;
       }
       break;
   }
-  Serial.printf("Switched to %s", getStateLabel(state));
+
+  if (initialState != state) {    
+    Serial.printf("Switched to %s\n", getStateLabel(state));
+    updateLabels();
+  }
 }
 
 void updateLabels() {
@@ -200,9 +205,9 @@ void updateLabels() {
       lv_label_set_text_fmt(label_distance, "a %d cm", (int)(beaconDistance * 100.0));
     }
   } else if (state == GUARDING) {
-    lv_label_set_text(label_distance, "Attention !");    
+    lv_label_set_text(label_distance, "Attention !");
   } else if (state == ALARM) {
-    lv_label_set_text(label_distance, "!!! ALERTE !!!");    
+    lv_label_set_text(label_distance, "!!! ALERTE !!!");
   }
   lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);
 }
@@ -277,7 +282,6 @@ void setup() {
   // Label pour la distance ou le smiley
   label_distance = lv_label_create(lv_scr_act(), NULL);
   lv_obj_set_style_local_text_font(label_distance, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, &lv_font_montserrat_28);
-  updateLabels();
 
   pinMode(AXP202_INT, INPUT_PULLUP);
   attachInterrupt(
