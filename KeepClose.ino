@@ -36,8 +36,8 @@ bool startsWithIgnoreCase(const std::string& str, const std::string& prefix) {
   return true;
 }
 
-float estimateDistance(int txPower, int rssi, float n = 2.0) {
-  return pow(10.0, ((float)txPower - (float)rssi) / (10.0 * n));
+float estimateDistance(int txPower, float rssi, float n = 2.0) {
+  return pow(10.0, ((float)txPower - rssi) / (10.0 * n));
 }
 
 class ScanCallbacks : public NimBLEScanCallbacks {
@@ -65,33 +65,11 @@ class ScanCallbacks : public NimBLEScanCallbacks {
                       oBeacon.getSignalPower());
 
         int txPower = oBeacon.getSignalPower();
-        int rssi = advertisedDevice->getRSSI();
+        float rssi = advertisedDevice->getRSSI();
         beaconDistance = estimateDistance(txPower, rssi);
         Serial.printf("Estimation de la distance : %.2fm\n", beaconDistance);
       }
       return;
-    }
-
-    NimBLEUUID eddyUUID = (uint16_t)0xfeaa;
-
-    if (advertisedDevice->getServiceUUID().equals(eddyUUID)) {
-      std::string serviceData = advertisedDevice->getServiceData(eddyUUID);
-      if (serviceData[0] == 0x20) {
-        Serial.println("Found an EddystoneTLM beacon!");
-        NimBLEEddystoneTLM foundEddyTLM = NimBLEEddystoneTLM();
-        foundEddyTLM.setData(reinterpret_cast<const uint8_t*>(serviceData.data()), serviceData.length());
-
-        Serial.printf("Reported battery voltage: %dmV\n", foundEddyTLM.getVolt());
-        Serial.printf("Reported temperature from TLM class: %.2fC\n", (double)foundEddyTLM.getTemp());
-        int temp = (int)serviceData[5] + (int)(serviceData[4] << 8);
-        float calcTemp = temp / 256.0f;
-        Serial.printf("Reported temperature from data: %.2fC\n", calcTemp);
-        Serial.printf("Reported advertise count: %d\n", foundEddyTLM.getCount());
-        Serial.printf("Reported time since last reboot: %ds\n", foundEddyTLM.getTime());
-        Serial.println("\n");
-        Serial.print(foundEddyTLM.toString().c_str());
-        Serial.println("\n");
-      }
     }
   }
 
