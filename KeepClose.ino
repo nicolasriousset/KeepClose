@@ -13,7 +13,7 @@ bool mustRefreshDisplay = false;
 unsigned long lastScanTime = 0;
 unsigned long lastReviewTime = 0;
 const unsigned long SCAN_INTERVAL = 5000;  // 5 secondes en millisecondes
-const int SCAN_DURATION = 3000;            // Durée du scan en secondes
+const int SCAN_DURATION = 1000;            // Durée du scan en milisecondes
 
 lv_obj_t* label_distance = NULL;
 
@@ -47,15 +47,9 @@ class ScanCallbacks : public NimBLEScanCallbacks {
     Serial.print(advertisedDevice->getName().c_str());
     Serial.println();
 
-    if (advertisedDevice->haveServiceUUID()) {
-      NimBLEUUID devUUID = advertisedDevice->getServiceUUID();
-      Serial.print("Found ServiceUUID: ");
-      Serial.println(devUUID.toString().c_str());
-      Serial.println("");
-    } else if (advertisedDevice->haveManufacturerData() == true) {
+    if (advertisedDevice->haveManufacturerData()) {
       std::string strManufacturerData = advertisedDevice->getManufacturerData();
       if (strManufacturerData.length() == 25 && strManufacturerData[0] == 0x4C && strManufacturerData[1] == 0x00) {
-        Serial.println("Found an iBeacon!");
         NimBLEBeacon oBeacon = NimBLEBeacon();
         oBeacon.setData(reinterpret_cast<const uint8_t*>(strManufacturerData.data()), strManufacturerData.length());
         Serial.printf("iBeacon Frame\n");
@@ -70,13 +64,6 @@ class ScanCallbacks : public NimBLEScanCallbacks {
         int rssi = advertisedDevice->getRSSI();
         beaconDistance = estimateDistance(txPower, rssi);
         Serial.printf("Estimation de la distance : %.2fm\n", beaconDistance);
-      } else {
-        Serial.println("Found another manufacturers beacon!");
-        Serial.printf("strManufacturerData: %d ", strManufacturerData.length());
-        for (int i = 0; i < strManufacturerData.length(); i++) {
-          Serial.printf("[%X]", strManufacturerData[i]);
-        }
-        Serial.printf("\n");
       }
       return;
     }
