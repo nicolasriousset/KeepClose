@@ -7,14 +7,17 @@
 
 
 typedef enum State { WAITING,
-                     GUARDING };
+                     GUARDING,
+                     WARNING,
+                     ALARM };
 
 // Est ce que la montre est en mode recherche de balise, ou en mode garde ?
 State state = WAITING;
 
 TTGOClass* ttgo;
 NimBLEScan* pBLEScan;
-float beaconDistance = -1.0;
+const float UNKNOWN = -1.0;
+float beaconDistance = UNKNOWN;
 unsigned long lastDetectionTime = 0;
 unsigned long lastScanTime = 0;
 const unsigned long SCAN_INTERVAL = 5000;  // Intervalle de scan en millisecondes
@@ -73,7 +76,7 @@ public:
     float sum = 0;
     int count = filled ? BUFFER_SIZE : index;
     if (count == 0) {
-      return -1;
+      return UNKNOWN;
     }
 
     for (int i = 0; i < count; i++) {
@@ -117,9 +120,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
         float rssi = averager.addValue(advertisedDevice->getRSSI());
         beaconDistance = estimateDistance(txPower, rssi);
         Serial.printf("Estimation de la distance : %.2fm\n", beaconDistance);
-        if (beaconDistance < PERIMETER_WARNING_RADIUS) {
-          state = GUARDING;
-        }
+        updateState(beaconDistance);
         updateDisplay();
       }
       return;
@@ -127,7 +128,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
   }
 
   void onScanEnd(const NimBLEScanResults& scanResults, int reason) override {
-    Serial.printf("End of scan, devices found : %d\n", scanResults.getCount());    
+    Serial.printf("End of scan, devices found : %d\n", scanResults.getCount());
   }
 
 } scanCallbacks;
@@ -141,22 +142,44 @@ void initNimBLE() {
   pBLEScan->setWindow(100);
 }
 
+void resetState() {
+  state = WAITING;
+  averager.reset();
+  updateDisplay();
+}
+
+void updateState(float beaconDistance) {
+  if (beaconDistance == UNKNOWN) {
+    state = WAITING;
+  } else if (beaconDistance > PERIMETER_ALERT_RADIUS) {
+    state = ALARM;
+  } else if (beaconDistance > PERIMETER_WARNING_RADIUS) {
+    state = WARNING;
+  } else {
+      state = GUARDING;
+  }
+}
+
 void updateDisplay() {
   if (state == WAITING) {
     lv_label_set_text(label_distance, "Recherche...");
-  } else { // state == GUARDING
-    if (beaconDistance >= PERIMETER_ALERT_RADIUS) {
-      lv_label_set_text(label_distance, "ALERTE !!!");
-    } else if (beaconDistance >= PERIMETER_WARNING_RADIUS) {
-      lv_label_set_text(label_distance, "Attention !");
+  } else if (state == GUARDING) {
+    if (beaconDistance >= PERIMETER_WARNING_RADIUS) {
     } else if (beaconDistance >= 1) {
-      char buffer[50] = {0};
-      snprintf(buffer, sizeof(buffer), "à %.2f m", beaconDistance);      
-      lv_label_set_text(label_distance, buffer);     
+      char buffer[50] = { 0 };
+      snprintf(buffer, sizeof(buffer), "à %.2f m", beaconDistance);
+      lv_label_set_text(label_distance, buffer);
     } else if (beaconDistance > 0) {
       lv_label_set_text_fmt(label_distance, "a %d cm", (int)(beaconDistance * 100.0));
-    } else {
     }
+  } else if (state == GUARDING) {
+      lv_label_set_text(label_distance, "Attention !");
+      lastActivityTime = millis();
+      turnOnScreen();
+  } else if (state == ALARM) {
+      lv_label_set_text(label_distance, "!!! ALERTE !!!");
+      lastActivityTime = millis();
+      turnOnScreen();
   }
   lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);
 }
@@ -175,6 +198,9 @@ void handleButtonPress() {
   } else {
     // Si l'écran est éteint, l'allumer
     turnOnScreen();
+  }
+  if (state == ALARM || state == WARNING) {
+    resetState();
   }
   lastActivityTime = millis();
 }
