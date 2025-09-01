@@ -5,15 +5,22 @@
 #include "NimBLEBeacon.h"
 #include <cctype>
 
+
+typedef enum State { WAITING,
+                     GUARDING };
+
+// Est ce que la montre est en mode recherche de balise, ou en mode garde ?
+State state = WAITING;
+
 TTGOClass* ttgo;
 NimBLEScan* pBLEScan;
-bool beaconFound = false;
-float beaconDistance = -1;
-bool mustRefreshDisplay = false;
+float beaconDistance = -1.0;
+unsigned long lastDetectionTime = 0;
 unsigned long lastScanTime = 0;
-unsigned long lastReviewTime = 0;
-const unsigned long SCAN_INTERVAL = 5000;  // 5 secondes en millisecondes
+const unsigned long SCAN_INTERVAL = 5000;  // Intervalle de scan en millisecondes
 const int SCAN_DURATION = 1000;            // Durée du scan en milisecondes
+const int PERIMETER_WARNING_RADIUS = 20;   // distance de la balise à partir de laquelle on fait vibrer la montre
+const int PERIMETER_ALERT_RADIUS = 40;     // distance de la balise à partir de laquelle on fait sonner la montre
 bool irq = false;
 bool screenOn = true;
 unsigned long lastActivityTime = 0;
@@ -55,8 +62,20 @@ public:
     index = (index + 1) % BUFFER_SIZE;
     if (!filled && index == 0) filled = true;
 
+    return computeAverage();
+  }
+
+  boolean canComputeAverage() {
+    return filled || index > 0;
+  }
+
+  float computeAverage() {
     float sum = 0;
     int count = filled ? BUFFER_SIZE : index;
+    if (count == 0) {
+      return -1;
+    }
+
     for (int i = 0; i < count; i++) {
       sum += buffer[i];
     }
@@ -76,6 +95,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
       // Ignore devices that are not named 'Holy-IOT'
       return;
     }
+    lastDetectionTime = millis();
     Serial.print("Balise détectée: ");
     Serial.print(advertisedDevice->getName().c_str());
     Serial.println();
@@ -97,14 +117,17 @@ class ScanCallbacks : public NimBLEScanCallbacks {
         float rssi = averager.addValue(advertisedDevice->getRSSI());
         beaconDistance = estimateDistance(txPower, rssi);
         Serial.printf("Estimation de la distance : %.2fm\n", beaconDistance);
+        if (beaconDistance < PERIMETER_WARNING_RADIUS) {
+          state = GUARDING;
+        }
+        updateDisplay();
       }
       return;
     }
   }
 
   void onScanEnd(const NimBLEScanResults& scanResults, int reason) override {
-    Serial.printf("End of scan, devices found : %d\n", scanResults.getCount());
-    updateDisplay();
+    Serial.printf("End of scan, devices found : %d\n", scanResults.getCount());    
   }
 
 } scanCallbacks;
@@ -119,21 +142,27 @@ void initNimBLE() {
 }
 
 void updateDisplay() {
-  if (beaconDistance >= 1) {
-    lv_label_set_text_fmt(label_distance, "a %d m", (int)beaconDistance);
-    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);
-  } else if (beaconDistance > 0) {
-    lv_label_set_text_fmt(label_distance, "a %d cm", (int)(beaconDistance * 100.0));
-    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);
-  } else {
+  if (state == WAITING) {
     lv_label_set_text(label_distance, "Recherche...");
-    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);
+  } else { // state == GUARDING
+    if (beaconDistance >= PERIMETER_ALERT_RADIUS) {
+      lv_label_set_text(label_distance, "ALERTE !!!");
+    } else if (beaconDistance >= PERIMETER_WARNING_RADIUS) {
+      lv_label_set_text(label_distance, "Attention !");
+    } else if (beaconDistance >= 1) {
+      char buffer[50] = {0};
+      snprintf(buffer, sizeof(buffer), "à %.2f m", beaconDistance);      
+      lv_label_set_text(label_distance, buffer);     
+    } else if (beaconDistance > 0) {
+      lv_label_set_text_fmt(label_distance, "a %d cm", (int)(beaconDistance * 100.0));
+    } else {
+    }
   }
+  lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);
 }
 
 void startBeaconScan() {
   Serial.println("=== DÉBUT DU SCAN ===");
-  beaconFound = false;
   lastScanTime = millis();
 
   pBLEScan->start(SCAN_DURATION);
