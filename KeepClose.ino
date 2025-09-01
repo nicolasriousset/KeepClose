@@ -20,7 +20,7 @@ const float UNKNOWN = -1.0;
 float beaconDistance = UNKNOWN;
 unsigned long lastDetectionTime = 0;
 unsigned long lastScanTime = 0;
-const unsigned long SCAN_INTERVAL = 5000;         // Intervalle de scan en millisecondes
+const unsigned long SCAN_INTERVAL = 2000;         // Intervalle de scan en millisecondes
 const int SCAN_DURATION = 1000;                   // Durée du scan en milisecondes
 const int WARNING_DISTANCE = 10;                  // distance de la balise à partir de laquelle on fait vibrer la montre
 const int ALARM_DISTANCE = 2 * WARNING_DISTANCE;  // distance de la balise à partir de laquelle on fait sonner la montre
@@ -199,10 +199,10 @@ void updateLabels() {
     if (beaconDistance >= WARNING_DISTANCE) {
     } else if (beaconDistance >= 1) {
       char buffer[50] = { 0 };
-      snprintf(buffer, sizeof(buffer), "à %.2f m", beaconDistance);
+      snprintf(buffer, sizeof(buffer), "%.2f m", beaconDistance);
       lv_label_set_text(label_distance, buffer);
     } else if (beaconDistance > 0) {
-      lv_label_set_text_fmt(label_distance, "a %d cm", (int)(beaconDistance * 100.0));
+      lv_label_set_text_fmt(label_distance, "%d cm", (int)(beaconDistance * 100.0));
     }
   } else if (state == GUARDING) {
     lv_label_set_text(label_distance, "Attention !");
