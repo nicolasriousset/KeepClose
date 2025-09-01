@@ -14,6 +14,10 @@ unsigned long lastScanTime = 0;
 unsigned long lastReviewTime = 0;
 const unsigned long SCAN_INTERVAL = 5000;  // 5 secondes en millisecondes
 const int SCAN_DURATION = 1000;            // Durée du scan en milisecondes
+bool irq = false;
+bool screenOn = true;
+unsigned long lastActivityTime = 0;
+const unsigned long SCREEN_TIMEOUT = 10000;
 
 lv_obj_t* label_distance = NULL;
 
@@ -107,34 +111,16 @@ void initNimBLE() {
   pBLEScan->setWindow(100);
 }
 
-void setup() {
-  Serial.begin(115200);
-  delay(1000);
-
-  initNimBLE();
-
-  ttgo = TTGOClass::getWatch();
-  ttgo->begin();
-  ttgo->openBL();
-  ttgo->motor_begin();
-  ttgo->lvgl_begin();
-
-  // Label pour la distance ou le smiley
-  label_distance = lv_label_create(lv_scr_act(), NULL);    
-  lv_obj_set_style_local_text_font(label_distance, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, &lv_font_montserrat_28);
-  updateDisplay();  
-}
-
 void updateDisplay() {
   if (beaconDistance >= 1) {
     lv_label_set_text_fmt(label_distance, "a %d m", (int)beaconDistance);
-    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);  
+    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);
   } else if (beaconDistance > 0) {
     lv_label_set_text_fmt(label_distance, "a %d cm", (int)(beaconDistance * 100.0));
-    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);  
-  } else {    
+    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);
+  } else {
     lv_label_set_text(label_distance, "Recherche...");
-    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);  
+    lv_obj_align(label_distance, NULL, LV_ALIGN_CENTER, 0, 0);
   }
 }
 
@@ -146,6 +132,61 @@ void startBeaconScan() {
   pBLEScan->start(SCAN_DURATION);
 }
 
+void handleButtonPress() {
+    if (screenOn) {
+        // Si l'écran est allumé, le mettre en veille
+        turnOffScreen();
+    } else {
+        // Si l'écran est éteint, l'allumer
+        turnOnScreen();
+    }
+    lastActivityTime = millis();
+}
+
+void turnOnScreen() {
+    ttgo->openBL(); // Active le rétroéclairage
+    ttgo->displayWakeup(); // Réveille l'écran
+       
+    screenOn = true;
+    Serial.println("Écran allumé");
+}
+
+void turnOffScreen() {
+    ttgo->closeBL(); // Éteint le rétroéclairage
+    ttgo->displaySleep(); // Met l'écran en veille
+    
+    screenOn = false;
+    Serial.println("Écran éteint");
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  initNimBLE();
+
+  ttgo = TTGOClass::getWatch();
+  ttgo->begin();
+  ttgo->motor_begin();
+  ttgo->lvgl_begin();
+
+  turnOnScreen();
+  // Label pour la distance ou le smiley
+  label_distance = lv_label_create(lv_scr_act(), NULL);
+  lv_obj_set_style_local_text_font(label_distance, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, &lv_font_montserrat_28);
+  updateDisplay();
+
+  pinMode(AXP202_INT, INPUT_PULLUP);
+  attachInterrupt(
+    AXP202_INT, [] {
+      irq = true;
+    },
+    FALLING);
+
+  //!Clear IRQ unprocessed  first
+  ttgo->power->enableIRQ(AXP202_PEK_SHORTPRESS_IRQ, true);
+  ttgo->power->clearIRQ();
+}
 
 void loop() {
   lv_task_handler();
@@ -159,5 +200,20 @@ void loop() {
     }
   }
 
+  if (irq) {
+    irq = false;
+    ttgo->power->readIRQ();
+
+    if (ttgo->power->isPEKShortPressIRQ()) {
+      handleButtonPress();
+    }
+    ttgo->power->clearIRQ();
+  }
+
+   if (screenOn && (millis() - lastActivityTime > SCREEN_TIMEOUT)) {
+        turnOffScreen();
+    }  
+
   delay(100);
 }
+
