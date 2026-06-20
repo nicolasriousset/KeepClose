@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import fitz; print\\('pymupdf ok'\\)\")",
+      "Bash(python3 -c \"import pdfminer; print\\('pdfminer ok'\\)\")",
+      "Bash(python3 -c \"import pptx; print\\('python-pptx ok'\\)\")",
+      "Bash(python3 -c \"import docx; print\\('python-docx ok'\\)\")",
+      "Bash(pdftotext --version)",
+      "Bash(pdftotext \"C:\\\\Users\\\\nicol\\\\OneDrive - NeoLegal\\\\Projets\\\\KeepClose\\\\NICO Livret outil pedagogique bracelet vibratoire connecté.pdf\" -)",
+      "Bash(pdftotext \"C:\\\\Users\\\\nicol\\\\OneDrive - NeoLegal\\\\Projets\\\\KeepClose\\\\Ti Poucet\\\\AVV_25_01_MOBIDETECT.pdf\" -)",
+      "Bash(pdftotext \"C:\\\\Users\\\\nicol\\\\OneDrive - NeoLegal\\\\Projets\\\\KeepClose\\\\Ti Poucet\\\\0131_MOB_.pdf\" -)",
+      "Bash(pdftotext \"C:\\\\Users\\\\nicol\\\\OneDrive - NeoLegal\\\\Projets\\\\KeepClose\\\\Ti Poucet\\\\MOB_131_pre╠üsentation POC.pdf\" -)",
+      "Bash(pdftotext \"C:\\\\Users\\\\nicol\\\\OneDrive - NeoLegal\\\\Projets\\\\KeepClose\\\\Ti Poucet\\\\Sans titre 7 2.pdf\" -)",
+      "Bash(cp \"C:\\\\Users\\\\nicol\\\\OneDrive - NeoLegal\\\\Projets\\\\KeepClose\\\\Ti Poucet\\\\MOB_131_pre╠üsentation POC.pdf\" /tmp/poc.pdf)",
+      "Bash(pdftotext /tmp/poc.pdf -)"
+    ]
+  }
+}
