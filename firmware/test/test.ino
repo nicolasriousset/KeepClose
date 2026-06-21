@@ -20,10 +20,11 @@
 
 #include <Adafruit_TinyUSB.h>
 
-// #define TEST_BLE_ENABLED
+// Decommentez pour activer le test BLE (Phase 4)
+#define TEST_BLE_ENABLED
 
 #ifdef TEST_BLE_ENABLED
-#include <ArduinoBLE.h>
+#include <bluefruit.h>  // bibliotheque BLE du BSP Seeed/Adafruit nRF52 — pas ArduinoBLE
 #endif
 
 // Toutes les broches utilisateur du XIAO BLE nRF52840
@@ -94,28 +95,26 @@ void testBLE() {
 #ifdef TEST_BLE_ENABLED
   Serial.println("\n[Phase 4] Test BLE");
 
-  if (!BLE.begin()) {
-    Serial.println("  ERREUR : BLE ne demarre pas !");
-    Serial.println("  -> Verifiez les soudures cote antenne (extremite du module).");
-    return;
-  }
+  Bluefruit.begin();
+  Bluefruit.setName("XIAO-TEST");
 
-  BLE.setLocalName("XIAO-TEST");
-  BLE.advertise();
+  // Construire le paquet d'advertising avec le nom visible
+  Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
+  Bluefruit.Advertising.addTxPower();
+  Bluefruit.Advertising.addName();  // inclut "XIAO-TEST" dans le paquet
+  Bluefruit.Advertising.start(0);   // 0 = advertise indéfiniment
 
   Serial.println("  BLE actif. Lancez un scan sur votre smartphone.");
   Serial.println("  Application recommandee : nRF Connect (Android/iOS, gratuit).");
   Serial.println("  Vous devez voir apparaitre 'XIAO-TEST' dans la liste.");
-  Serial.println("  Attente 15 secondes...");
-  delay(15000);
+  Serial.println("  Appuyez sur Entree quand vous avez verifie...");
+  attendreEnter();
 
-  BLE.stopAdvertise();
-  BLE.end();
-  Serial.println("  -> Si vous avez vu 'XIAO-TEST' : antenne BLE OK");
+  Bluefruit.Advertising.stop();
+  Serial.println("  -> Antenne BLE OK");
 #else
   Serial.println("\n[Phase 4] Test BLE — desactive");
-  Serial.println("  Decommentez #define TEST_BLE_ENABLED en haut du fichier");
-  Serial.println("  une fois la bibliotheque BLE installee et fonctionnelle.");
+  Serial.println("  Commentez #define TEST_BLE_ENABLED en haut du fichier pour desactiver.");
 #endif
 }
 
