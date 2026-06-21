@@ -1,5 +1,4 @@
 #pragma once
-#include <ArduinoBLE.h>
 #include "config.h"
 
 // ---------------------------------------------------------------------------
@@ -120,22 +119,16 @@ float estimateDistance(float rssi) {
 // Commande ring via BLE GATT
 // ---------------------------------------------------------------------------
 
+// TODO: implémenter avec l'API Bluefruit Central (BLEClientService / BLEClientCharacteristic)
+//       Nécessite une gestion de connexion asynchrone via callbacks.
+//       Pour l'instant la commande est loguée mais pas envoyée.
 bool sendRingCommand(const char* address, byte cmd) {
-  BLE.stopScan();
-
-  BLEDevice device = BLE.available();
-  // TODO: filtrer par adresse MAC pour cibler la bonne balise
-  if (!device) { BLE.scan(); return false; }
-  if (!device.connect()) { BLE.scan(); return false; }
-  if (!device.discoverAttributes()) { device.disconnect(); BLE.scan(); return false; }
-
-  BLECharacteristic ringChar = device.characteristic(RING_CMD_CHAR_UUID);
-  if (!ringChar || !ringChar.canWrite()) { device.disconnect(); BLE.scan(); return false; }
-
-  ringChar.writeValue(cmd);
-  device.disconnect();
-  BLE.scan();
-  return true;
+  Serial.print("[ring] commande 0x");
+  Serial.print(cmd, HEX);
+  Serial.print(" vers ");
+  Serial.print(address);
+  Serial.println(" — non implemente");
+  return false;
 }
 
 void ringNearestBeacon(BeaconRegistry& registry) {

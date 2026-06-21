@@ -1,20 +1,20 @@
 /*
  * KeepClose v2 — Firmware Scanner
  * Hardware : Seeed Studio XIAO BLE nRF52840
- * Rôle     : Bracelet porté par l'utilisateur
+ * Role     : Bracelet porté par l'utilisateur
  *
- * Board package : Seeed nRF52 (Tools > Board > Seeed nRF52 Boards > XIAO BLE)
- * URL           : https://files.seeedstudio.com/arduino/package_seeeduino_boards_index.json
- * Bibliothèque  : ArduinoBLE (Gestionnaire de bibliothèques Arduino)
+ * Board package : Seeed nRF52 (Tools > Board > Seeed nRF52 Boards > Seeed XIAO nRF52840)
+ * Bibliotheque  : bluefruit.h (incluse dans le BSP Seeed/Adafruit nRF52)
  *
- * Sélection du projet : éditer firmware/scanner/config.h
- *   #define PROJECT_NICO      → alerte vibration si la canne sort du rayon
- *   #define PROJECT_TIPOUCET  → sonne la balise la plus proche pour guider
+ * Selection du projet : editer firmware/scanner/config.h
+ *   #define PROJECT_NICO      -> alerte vibration si la canne sort du rayon
+ *   #define PROJECT_TIPOUCET  -> sonne la balise la plus proche pour guider
  *
  * Appairage d'une balise : coller la balise contre le bracelet pendant 3 s.
- *   Le bracelet vibre 3 fois pour confirmer. L'appairage est sauvegardé en flash.
+ *   Le bracelet vibre 3 fois pour confirmer. L'appairage est sauvegarde en flash.
  */
-#include <ArduinoBLE.h>
+#include <Adafruit_TinyUSB.h>
+#include <bluefruit.h>
 #include "config.h"
 #include "scanner_core.h"
 
@@ -27,13 +27,12 @@
   #define PROJECT_SETUP()    tipoucetSetup()
   #define PROJECT_LOOP(reg)  tipoucetLoop(reg)
 #else
-  #error "Définir PROJECT_NICO ou PROJECT_TIPOUCET dans firmware/scanner/config.h"
+  #error "Definir PROJECT_NICO ou PROJECT_TIPOUCET dans firmware/scanner/config.h"
 #endif
 
 BeaconRegistry registry;
-unsigned long lastScanTime = 0;
 
-// 3 vibrations courtes = appairage confirmé
+// 3 vibrations courtes = appairage confirme
 void confirmPairing() {
   for (int i = 0; i < 3; i++) {
     digitalWrite(PIN_VIBRATION, HIGH);
@@ -43,29 +42,40 @@ void confirmPairing() {
   }
 }
 
-void onBLEDeviceDiscovered(BLEDevice device) {
-  if (!device.hasLocalName()) return;
-  if (String(device.localName()) != BEACON_LOCAL_NAME) return;
+// Callback appele par Bluefruit.Scanner pour chaque paquet advertising recu
+void onBLEDeviceDiscovered(ble_gap_evt_adv_report_t* report) {
+  // Filtrer par nom local (complete ou abrege)
+  uint8_t nameBuffer[32] = { 0 };
+  uint8_t nameLen = Bluefruit.Scanner.parseReportByType(report,
+      BLE_GAP_AD_TYPE_COMPLETE_LOCAL_NAME, nameBuffer, sizeof(nameBuffer) - 1);
+  if (nameLen == 0)
+    nameLen = Bluefruit.Scanner.parseReportByType(report,
+        BLE_GAP_AD_TYPE_SHORT_LOCAL_NAME, nameBuffer, sizeof(nameBuffer) - 1);
+  if (nameLen == 0) return;
+  if (strcmp((char*)nameBuffer, BEACON_LOCAL_NAME) != 0) return;
 
-  BeaconInfo* b = registry.findOrCreate(device.address().c_str());
+  // Convertir l'adresse BLE en chaine AA:BB:CC:DD:EE:FF
+  const uint8_t* a = report->peer_addr.addr;
+  char addr[18];
+  snprintf(addr, sizeof(addr), "%02X:%02X:%02X:%02X:%02X:%02X",
+           a[5], a[4], a[3], a[2], a[1], a[0]);
+
+  BeaconInfo* b = registry.findOrCreate(addr);
   if (!b) return;
 
   unsigned long now = millis();
-  int rssi = device.rssi();
-
+  int rssi = (int)report->rssi;
   b->lastSeenMs = now;
 
-  // Vérifier si cette balise vient d'être appairée
   if (updatePairing(b, rssi, now)) {
     savePairedBeacons(registry);
     confirmPairing();
   }
 
-  // Mise à jour de la distance uniquement pour les balises appairées
   if (b->paired) {
     b->distance = estimateDistance(rssi);
     Serial.print(b->address);
-    Serial.print(" → ");
+    Serial.print(" -> ");
     Serial.print(b->distance, 2);
     Serial.println(" m");
   }
@@ -73,31 +83,23 @@ void onBLEDeviceDiscovered(BLEDevice device) {
 
 void setup() {
   Serial.begin(115200);
+  unsigned long t = millis();
+  while (!Serial && millis() - t < 3000);
+
   pinMode(PIN_VIBRATION, OUTPUT);
   digitalWrite(PIN_VIBRATION, LOW);
 
   loadPairedBeacons(registry);
   PROJECT_SETUP();
 
-  if (!BLE.begin()) {
-    Serial.println("Erreur BLE");
-    while (true);
-  }
+  Bluefruit.begin();
+  Bluefruit.Scanner.setRxCallback(onBLEDeviceDiscovered);
+  Bluefruit.Scanner.start(0);  // scan en continu, pas de timeout
 
-  BLE.setScanCallback(onBLEDeviceDiscovered);
-  BLE.scan();
-  Serial.println("KeepClose v2 — Scanner prêt");
+  Serial.println("KeepClose v2 — Scanner pret");
 }
 
 void loop() {
-  unsigned long now = millis();
-  BLE.poll();
-
-  if (now - lastScanTime >= SCAN_INTERVAL_MS) {
-    lastScanTime = now;
-    BLE.scan();
-  }
-
   PROJECT_LOOP(registry);
   delay(10);
 }
