@@ -20,8 +20,7 @@
 #define BEACON_TIMEOUT_MS       6000
 
 // ── Appairage ────────────────────────────────────────────────────────────────
-// Seuil RSSI pour détecter une balise "collée" contre le bracelet (~5-10 cm)
-#define PAIRING_RSSI_THRESHOLD  -45
+// PAIRING_RSSI_THRESHOLD est défini dans common/config.h (-45 dBm)
 
 // Durée de maintien au contact requise pour valider l'appairage (ms)
 #define PAIRING_DURATION_MS     3000
