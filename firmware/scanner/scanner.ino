@@ -54,28 +54,16 @@ void signalPairingByAdvertising() {
 
 // Callback appele pour chaque paquet advertising recu
 void onBLEDeviceDiscovered(ble_gap_evt_adv_report_t* report) {
-  // ── Diagnostic : confirmer que le scan est actif ──────────────────────────
-  static uint32_t pktCount = 0;
-  if (++pktCount % 100 == 0) {
-    Serial.print("[scan] paquets BLE recus : ");
-    Serial.println(pktCount);
-  }
+  // nRF52 SDK15+ : reprendre le scan apres chaque rapport (obligatoire)
+  Bluefruit.Scanner.resume();
 
-  // ── Extraire le nom (paquet principal ou scan response) ───────────────────
+  // ── Filtrer par nom KC-Tag ────────────────────────────────────────────────
   uint8_t nameBuffer[32] = { 0 };
   uint8_t nameLen = Bluefruit.Scanner.parseReportByType(report,
       BLE_GAP_AD_TYPE_COMPLETE_LOCAL_NAME, nameBuffer, sizeof(nameBuffer) - 1);
   if (nameLen == 0)
     nameLen = Bluefruit.Scanner.parseReportByType(report,
         BLE_GAP_AD_TYPE_SHORT_LOCAL_NAME, nameBuffer, sizeof(nameBuffer) - 1);
-
-  // Log tout appareil nomme (utile pour voir KC-Tag et KC-Scanner)
-  if (nameLen > 0) {
-    Serial.print("[scan] '");
-    Serial.print((char*)nameBuffer);
-    Serial.print("' RSSI=");
-    Serial.println((int)report->rssi);
-  }
 
   if (nameLen == 0 || strcmp((char*)nameBuffer, BEACON_LOCAL_NAME) != 0) return;
 
@@ -92,16 +80,6 @@ void onBLEDeviceDiscovered(ble_gap_evt_adv_report_t* report) {
   int rssi = (int)report->rssi;
   b->lastSeenMs = now;
 
-  // Log RSSI et progression appairage
-  if (!b->paired) {
-    Serial.print("[appairage] ");
-    Serial.print(addr);
-    Serial.print(" RSSI=");
-    Serial.print(rssi);
-    Serial.print(" seuil=");
-    Serial.println(PAIRING_RSSI_THRESHOLD);
-  }
-
   if (updatePairing(b, rssi, now)) {
     savePairedBeacons(registry);
     confirmPairing();
@@ -111,10 +89,6 @@ void onBLEDeviceDiscovered(ble_gap_evt_adv_report_t* report) {
 
   if (b->paired) {
     b->distance = estimateDistance(rssi);
-    Serial.print(addr);
-    Serial.print(" -> ");
-    Serial.print(b->distance, 2);
-    Serial.println(" m");
   }
 }
 
@@ -151,7 +125,7 @@ void setup() {
   loadPairedBeacons(registry);
   PROJECT_SETUP();
 
-  Bluefruit.begin();
+  Bluefruit.begin(1, 1);  // 1 periph (advertising appairage) + 1 central (scan)
 
   // Preparer l'advertising "KC-Scanner" (demarre seulement lors de l'appairage)
   Bluefruit.setName(SCANNER_LOCAL_NAME);
@@ -159,14 +133,37 @@ void setup() {
   Bluefruit.Advertising.addName();
 
   // Lancer le scan BLE
+  Bluefruit.Scanner.setInterval(160, 80);  // 100 ms interval, 50 ms window
+  Bluefruit.Scanner.useActiveScan(true);   // inclure les scan response (nom dans ScanResponse)
   Bluefruit.Scanner.setRxCallback(onBLEDeviceDiscovered);
-  Bluefruit.Scanner.start(0);
+  bool scanOk = Bluefruit.Scanner.start(0);
 
   Serial.println("KeepClose v2 — Scanner pret");
+  Serial.print("  Scan BLE demarre : ");
+  Serial.println(scanOk ? "OK" : "ECHEC");
+  Serial.print("  PAIRING_RSSI_THRESHOLD = ");
+  Serial.println(PAIRING_RSSI_THRESHOLD);
+  Serial.print("  PAIRING_DURATION_MS    = ");
+  Serial.println(PAIRING_DURATION_MS);
 }
 
 void loop() {
   PROJECT_LOOP(registry);
   updateStatusLed();
+
+  static unsigned long lastHb = 0;
+  if (millis() - lastHb >= 5000) {
+    lastHb = millis();
+    int paired = 0;
+    for (int i = 0; i < registry.count; i++)
+      if (registry.beacons[i].paired) paired++;
+    Serial.print("[hb] t=");
+    Serial.print(millis() / 1000);
+    Serial.print("s  balises vues=");
+    Serial.print(registry.count);
+    Serial.print("  appairees=");
+    Serial.println(paired);
+  }
+
   delay(10);
 }

@@ -47,14 +47,14 @@ void onRingCommand(uint16_t conn_handle, BLECharacteristic* chr, uint8_t* data, 
 
 // Detecte l'advertising "KC-Scanner" emis par le bracelet lors d'un appairage
 void onScannerFound(ble_gap_evt_adv_report_t* report) {
+  Bluefruit.Scanner.resume();
   uint8_t nameBuffer[32] = { 0 };
   uint8_t nameLen = Bluefruit.Scanner.parseReportByType(report,
       BLE_GAP_AD_TYPE_COMPLETE_LOCAL_NAME, nameBuffer, sizeof(nameBuffer) - 1);
   if (nameLen == 0)
     nameLen = Bluefruit.Scanner.parseReportByType(report,
         BLE_GAP_AD_TYPE_SHORT_LOCAL_NAME, nameBuffer, sizeof(nameBuffer) - 1);
-  if (nameLen == 0) return;
-  if (strcmp((char*)nameBuffer, SCANNER_LOCAL_NAME) != 0) return;
+  if (nameLen == 0 || strcmp((char*)nameBuffer, SCANNER_LOCAL_NAME) != 0) return;
 
   if ((int)report->rssi >= PAIRING_RSSI_THRESHOLD) {
     digitalWrite(LED_GREEN, LOW);
@@ -78,7 +78,7 @@ void setup() {
   pinMode(LED_GREEN, OUTPUT);
   digitalWrite(LED_GREEN, HIGH);  // eteinte au demarrage
 
-  Bluefruit.begin();
+  Bluefruit.begin(1, 1);  // 1 periph (advertising) + 1 central (scan KC-Scanner)
   Bluefruit.Periph.setConnectCallback(onConnect);
   Bluefruit.Periph.setDisconnectCallback(onDisconnect);
   Bluefruit.setName(BEACON_LOCAL_NAME);
@@ -103,10 +103,16 @@ void setup() {
   Bluefruit.Advertising.start(0);    // advertise en continu
 
   // Scanner en parallele pour detecter KC-Scanner lors d'un appairage
+  Bluefruit.Scanner.setInterval(160, 80);
+  Bluefruit.Scanner.useActiveScan(true);
   Bluefruit.Scanner.setRxCallback(onScannerFound);
-  Bluefruit.Scanner.start(0);
+  bool scanOk = Bluefruit.Scanner.start(0);
 
   Serial.println("Tag actif — advertising + scan KC-Scanner prets");
+  Serial.print("  Scan BLE demarre : ");
+  Serial.println(scanOk ? "OK" : "ECHEC");
+  Serial.print("  PAIRING_RSSI_THRESHOLD = ");
+  Serial.println(PAIRING_RSSI_THRESHOLD);
 }
 
 void loop() {

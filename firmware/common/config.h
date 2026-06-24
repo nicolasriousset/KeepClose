@@ -4,8 +4,8 @@
 #define BEACON_LOCAL_NAME       "KC-Tag"
 #define SCANNER_LOCAL_NAME      "KC-Scanner"
 
-// Seuil RSSI pour détecter un module "collé" (~5-10 cm)
-#define PAIRING_RSSI_THRESHOLD  -45
+// Seuil RSSI pour détecter un module "collé" (~5-8 cm)
+#define PAIRING_RSSI_THRESHOLD  -38
 
 // Service GATT "ring" — commun à tous les tags
 #define RING_SERVICE_UUID       "12345678-1234-1234-1234-123456789ABC"
