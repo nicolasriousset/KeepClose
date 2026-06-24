@@ -163,6 +163,19 @@ void loop() {
     Serial.print(registry.count);
     Serial.print("  appairees=");
     Serial.println(paired);
+    for (int i = 0; i < registry.count; i++) {
+      BeaconInfo& b = registry.beacons[i];
+      Serial.print("  ");
+      Serial.print(b.address);
+      Serial.print(b.paired ? " [appairee]" : " [non appairee]");
+      Serial.print(b.isAlive() ? " vivante" : " hors portee");
+      if (b.paired && b.distance >= 0) {
+        Serial.print("  ");
+        Serial.print(b.distance, 2);
+        Serial.print(" m");
+      }
+      Serial.println();
+    }
   }
 
   delay(10);
