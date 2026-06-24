@@ -154,28 +154,42 @@ void loop() {
   static unsigned long lastHb = 0;
   if (millis() - lastHb >= 5000) {
     lastHb = millis();
-    int paired = 0;
+
+    // Collecter les balises appairees et les trier par distance (insertion sort)
+    BeaconInfo* sorted[MAX_BEACONS];
+    int pairedCount = 0;
     for (int i = 0; i < registry.count; i++)
-      if (registry.beacons[i].paired) paired++;
+      if (registry.beacons[i].paired) sorted[pairedCount++] = &registry.beacons[i];
+    for (int i = 1; i < pairedCount; i++) {
+      BeaconInfo* key = sorted[i];
+      float keyDist = (key->isAlive() && key->distance >= 0) ? key->distance : 1e9f;
+      int j = i - 1;
+      while (j >= 0) {
+        float jDist = (sorted[j]->isAlive() && sorted[j]->distance >= 0) ? sorted[j]->distance : 1e9f;
+        if (jDist <= keyDist) break;
+        sorted[j + 1] = sorted[j];
+        j--;
+      }
+      sorted[j + 1] = key;
+    }
+
     Serial.print("[hb] t=");
     Serial.print(millis() / 1000);
     Serial.print("s  balises vues=");
     Serial.print(registry.count);
     Serial.print("  appairees=");
-    Serial.println(paired);
-    for (int i = 0; i < registry.count; i++) {
-      BeaconInfo& b = registry.beacons[i];
-      Serial.print("  ");
-      Serial.print(b.address);
-      Serial.print(b.paired ? " [appairee]" : " [non appairee]");
-      Serial.print(b.isAlive() ? " vivante" : " hors portee");
-      if (b.paired && b.distance >= 0) {
-        Serial.print("  ");
-        Serial.print(b.distance, 2);
-        Serial.print(" m");
+    Serial.print(pairedCount);
+    Serial.print("  [");
+    for (int i = 0; i < pairedCount; i++) {
+      if (i > 0) Serial.print(", ");
+      if (sorted[i]->isAlive() && sorted[i]->distance >= 0) {
+        Serial.print(sorted[i]->distance, 2);
+        Serial.print("m");
+      } else {
+        Serial.print("?");
       }
-      Serial.println();
     }
+    Serial.println("]");
   }
 
   delay(10);
