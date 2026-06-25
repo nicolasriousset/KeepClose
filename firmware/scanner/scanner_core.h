@@ -1,5 +1,20 @@
 #pragma once
 #include "config.h"
+#include <Adafruit_LittleFS.h>
+#include <InternalFileSystem.h>
+
+using namespace Adafruit_LittleFS_Namespace;
+
+static uint16_t ownCrc = 0;
+static File     _scannerFlashFile(InternalFS);
+
+// Doit être appelé après Bluefruit.begin()
+void initOwnCrc() {
+  ble_gap_addr_t addr = Bluefruit.getAddr();
+  ownCrc = crc16(addr.addr, 6);
+  Serial.print("[pairing] ownCrc=0x");
+  Serial.println(ownCrc, HEX);
+}
 
 // ---------------------------------------------------------------------------
 // Registre multi-balises
@@ -64,14 +79,39 @@ public:
 //       Format suggéré : fichier texte "/paired.txt", une adresse MAC par ligne.
 
 void savePairedBeacons(BeaconRegistry& registry) {
-  // TODO: écrire les adresses registry.beacons[i].address pour lesquelles paired==true
-  Serial.println("[flash] savePairedBeacons — non implémenté");
+  if (!_scannerFlashFile.open("/paired.txt", FILE_O_WRITE)) {
+    Serial.println("[flash] savePairedBeacons — erreur ouverture");
+    return;
+  }
+  for (int i = 0; i < registry.count; i++) {
+    if (registry.beacons[i].paired) {
+      _scannerFlashFile.print(registry.beacons[i].address);
+      _scannerFlashFile.print('\n');
+    }
+  }
+  _scannerFlashFile.close();
+  Serial.println("[flash] paired beacons sauvegardés");
 }
 
 void loadPairedBeacons(BeaconRegistry& registry) {
-  // TODO: lire le fichier et appeler registry.findOrCreate(addr)->paired = true
-  //       pour chaque adresse sauvegardée
-  Serial.println("[flash] loadPairedBeacons — non implémenté");
+  if (!_scannerFlashFile.open("/paired.txt", FILE_O_READ)) return;
+  char    line[18];
+  uint8_t idx = 0;
+  while (_scannerFlashFile.available()) {
+    char c = (char)_scannerFlashFile.read();
+    if (c == '\n' || idx >= 17) {
+      if (idx == 17) {
+        line[17] = '\0';
+        BeaconInfo* b = registry.findOrCreate(line);
+        if (b) b->paired = true;
+      }
+      idx = 0;
+    } else {
+      line[idx++] = c;
+    }
+  }
+  _scannerFlashFile.close();
+  Serial.println("[flash] paired beacons chargés");
 }
 
 // ---------------------------------------------------------------------------

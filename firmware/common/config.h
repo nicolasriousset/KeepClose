@@ -22,3 +22,18 @@
 
 // Exposant de perte de trajet (à calibrer selon l'environnement)
 #define PATH_LOSS_N             2.0f
+
+// Identification du bracelet propriétaire dans l'advertising de la balise
+// Company ID 0xFFFF = non-assigné (usage prototype)
+#define PAIRING_MANUFACTURER_ID  0xFFFF
+
+// CRC16-CCITT : identifie le bracelet propriétaire (6 octets MAC → uint16_t)
+static inline uint16_t crc16(const uint8_t* data, uint8_t len) {
+  uint16_t crc = 0xFFFF;
+  for (uint8_t i = 0; i < len; i++) {
+    crc ^= (uint16_t)data[i] << 8;
+    for (uint8_t j = 0; j < 8; j++)
+      crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : (uint16_t)(crc << 1);
+  }
+  return crc;
+}

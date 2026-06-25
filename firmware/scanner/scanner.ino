@@ -80,6 +80,23 @@ void onBLEDeviceDiscovered(ble_gap_evt_adv_report_t* report) {
   int rssi = (int)report->rssi;
   b->lastSeenMs = now;
 
+  // Lire le CRC du bracelet propriétaire depuis le manufacturer data de la balise
+  uint8_t mfrBuf[10] = { 0 };
+  uint8_t mfrLen = Bluefruit.Scanner.parseReportByType(report,
+      BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA, mfrBuf, sizeof(mfrBuf));
+  if (mfrLen >= 4 && b->paired) {
+    uint16_t companyId = (uint16_t)mfrBuf[0] | ((uint16_t)mfrBuf[1] << 8);
+    uint16_t tagCrc    = (uint16_t)mfrBuf[2] | ((uint16_t)mfrBuf[3] << 8);
+    if (companyId == PAIRING_MANUFACTURER_ID && tagCrc != 0 && tagCrc != ownCrc) {
+      b->paired         = false;
+      b->pairingStartMs = 0;
+      savePairedBeacons(registry);
+      Serial.print("Balise désappairée (appairée à un autre bracelet) : ");
+      Serial.println(b->address);
+      return;
+    }
+  }
+
   if (updatePairing(b, rssi, now)) {
     savePairedBeacons(registry);
     confirmPairing();
@@ -122,10 +139,12 @@ void setup() {
   pinMode(LED_GREEN, OUTPUT);
   digitalWrite(LED_GREEN, HIGH);
 
+  InternalFS.begin();
   loadPairedBeacons(registry);
   PROJECT_SETUP();
 
   Bluefruit.begin(1, 1);  // 1 periph (advertising appairage) + 1 central (scan)
+  initOwnCrc();
 
   // Preparer l'advertising "KC-Scanner" (demarre seulement lors de l'appairage)
   Bluefruit.setName(SCANNER_LOCAL_NAME);
