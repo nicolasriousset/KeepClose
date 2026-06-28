@@ -16,12 +16,26 @@
 #define RING_CMD_STOP           0x00
 #define RING_CMD_PAIR           0x02  // confirmation d'appairage → LED verte 5 s sur le tag
 
+// Seuils de proximité avec hystérésis (tag et scanner partagent ces valeurs)
+// Vert → Rouge : distance dépasse FAR
+// Rouge → Vert : distance repasse sous NEAR
+#define PROXIMITY_NEAR_DISTANCE_M   0.45f
+#define PROXIMITY_FAR_DISTANCE_M    0.55f
+
 // Seuils d'alerte (mètres)
-#define DISTANCE_WARNING        3.0f
-#define DISTANCE_ALARM          6.0f
+#define DISTANCE_WARNING            3.0f   // vibration / sonnerie au-delà de cette distance
+#define DISTANCE_ALARM              6.0f
+
+// Seuil RSSI pour l'alerte "hors de portée" (dBm, à calibrer empiriquement)
+// Avec TX_POWER_AT_1M=-59 et PATH_LOSS_N=2, -70 dBm ≈ 3.5 m en espace libre.
+// Utiliser ce seuil plutôt que la distance : moins sensible aux réflexions.
+#define RSSI_WARNING            -70
 
 // Exposant de perte de trajet (à calibrer selon l'environnement)
 #define PATH_LOSS_N             2.0f
+
+// Coefficient de lissage EMA du RSSI (0.0–1.0 : plus élevé = plus réactif, plus bruité)
+#define RSSI_EMA_ALPHA          0.1f
 
 // Identification du bracelet propriétaire dans l'advertising de la balise
 // Company ID 0xFFFF = non-assigné (usage prototype)

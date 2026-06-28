@@ -22,12 +22,14 @@
 
 #if defined(PROJECT_NICO)
   #include "project_nico.h"
-  #define PROJECT_SETUP()    nicoSetup()
-  #define PROJECT_LOOP(reg)  nicoLoop(reg)
+  #define PROJECT_SETUP()          nicoSetup()
+  #define PROJECT_LOOP(reg)        nicoLoop(reg)
+  #define PROJECT_LED(reg, pairing) nicoLedUpdate(reg, pairing)
 #elif defined(PROJECT_TIPOUCET)
   #include "project_tipoucet.h"
-  #define PROJECT_SETUP()    tipoucetSetup()
-  #define PROJECT_LOOP(reg)  tipoucetLoop(reg)
+  #define PROJECT_SETUP()          tipoucetSetup()
+  #define PROJECT_LOOP(reg)        tipoucetLoop(reg)
+  #define PROJECT_LED(reg, pairing) /* LED non gérée en mode Ti Poucet */
 #else
   #error "Definir PROJECT_NICO ou PROJECT_TIPOUCET dans firmware/scanner/config.h"
 #endif
@@ -46,10 +48,10 @@ void confirmPairing() {
   }
 }
 
-// Advertise "KC-Scanner" 5 s : le tag le detecte et allume sa LED verte
+// Le scanner advertise KC-Scanner en continu (démarré dans setup) :
+// le tag peut ainsi détecter sa présence et estimer la distance.
 void signalPairingByAdvertising() {
-  Bluefruit.Advertising.start(5);  // 5 s puis arret automatique
-  Serial.println("Advertising KC-Scanner 5 s (signal appairage)");
+  Serial.println("Advertising KC-Scanner actif (visible par les tags)");
 }
 
 // Callback appele pour chaque paquet advertising recu
@@ -105,29 +107,13 @@ void onBLEDeviceDiscovered(ble_gap_evt_adv_report_t* report) {
   }
 
   if (b->paired) {
-    b->distance = estimateDistance(rssi);
+    b->rssi    = rssi;
+    b->rssiEma = (b->rssiEma == 0.0f) ? (float)rssi
+                                       : RSSI_EMA_ALPHA * rssi + (1.0f - RSSI_EMA_ALPHA) * b->rssiEma;
+    b->distance = estimateDistance(b->rssiEma);
   }
 }
 
-// LED verte : 5 s apres appairage, puis indicateur "balise vivante"
-void updateStatusLed() {
-  if (pairingLedUntil > 0) {
-    if (millis() < pairingLedUntil) {
-      digitalWrite(LED_GREEN, LOW);
-      return;
-    }
-    pairingLedUntil = 0;
-  }
-  bool paireeVivante = false;
-  for (int i = 0; i < registry.count; i++) {
-    if (registry.beacons[i].paired && registry.beacons[i].isAlive()) {
-      paireeVivante = true;
-      break;
-    }
-  }
-  // LED_GREEN active LOW : LOW = allumee, HIGH = eteinte
-  digitalWrite(LED_GREEN, paireeVivante ? LOW : HIGH);
-}
 
 void setup() {
   Serial.begin(115200);
@@ -136,8 +122,9 @@ void setup() {
 
   pinMode(PIN_VIBRATION, OUTPUT);
   digitalWrite(PIN_VIBRATION, LOW);
-  pinMode(LED_GREEN, OUTPUT);
-  digitalWrite(LED_GREEN, HIGH);
+  pinMode(LED_RED,   OUTPUT); digitalWrite(LED_RED,   HIGH);
+  pinMode(LED_GREEN, OUTPUT); digitalWrite(LED_GREEN, HIGH);
+  pinMode(LED_BLUE,  OUTPUT); digitalWrite(LED_BLUE,  HIGH);
 
   InternalFS.begin();
   loadPairedBeacons(registry);
@@ -146,10 +133,13 @@ void setup() {
   Bluefruit.begin(1, 1);  // 1 periph (advertising appairage) + 1 central (scan)
   initOwnCrc();
 
-  // Preparer l'advertising "KC-Scanner" (demarre seulement lors de l'appairage)
+  // Advertising "KC-Scanner" en continu (intervalle lent = économie d'énergie)
+  // Le tag utilise ces paquets pour détecter la présence et la distance du bracelet.
   Bluefruit.setName(SCANNER_LOCAL_NAME);
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
   Bluefruit.Advertising.addName();
+  Bluefruit.Advertising.setInterval(480, 480);  // 300 ms (480 × 0.625 ms)
+  Bluefruit.Advertising.start(0);               // continu
 
   // Lancer le scan BLE
   Bluefruit.Scanner.setInterval(160, 80);  // 100 ms interval, 50 ms window
@@ -168,7 +158,7 @@ void setup() {
 
 void loop() {
   PROJECT_LOOP(registry);
-  updateStatusLed();
+  PROJECT_LED(registry, pairingLedUntil > 0 && millis() < pairingLedUntil);
 
   static unsigned long lastHb = 0;
   if (millis() - lastHb >= 5000) {
@@ -202,10 +192,14 @@ void loop() {
     for (int i = 0; i < pairedCount; i++) {
       if (i > 0) Serial.print(", ");
       if (sorted[i]->isAlive() && sorted[i]->distance >= 0) {
-        Serial.print(sorted[i]->distance, 2);
-        Serial.print("m");
+        Serial.print(sorted[i]->distance, 1);
+        Serial.print("m ");
+        Serial.print(sorted[i]->rssi);
+        Serial.print("dBm(");
+        Serial.print((int)sorted[i]->rssiEma);
+        Serial.print("ema)");
       } else {
-        Serial.print("?");
+        Serial.print("hors portee");
       }
     }
     Serial.println("]");

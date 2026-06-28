@@ -23,6 +23,8 @@ void initOwnCrc() {
 struct BeaconInfo {
   char          address[18];
   float         distance;
+  int           rssi;      // RSSI brut du dernier paquet (pour affichage)
+  float         rssiEma;   // RSSI lissé par EMA (pour distance et LED)
   bool          paired;
   bool          snoozed;
   unsigned long lastSeenMs;
@@ -52,6 +54,8 @@ public:
     strncpy(n.address, addr, 17);
     n.address[17]    = '\0';
     n.distance       = -1.0f;
+    n.rssi           = 0;
+    n.rssiEma        = 0.0f;  // 0 = pas encore de mesure
     n.paired         = false;
     n.snoozed        = false;
     n.lastSeenMs     = 0;

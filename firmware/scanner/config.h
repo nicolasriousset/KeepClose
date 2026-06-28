@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Puissance TX du tag à 1 mètre (doit correspondre à la calibration du tag)
-#define TX_POWER_AT_1M          -59
+#define TX_POWER_AT_1M          -61
 
 // Scan BLE
 #define SCAN_INTERVAL_MS        2000

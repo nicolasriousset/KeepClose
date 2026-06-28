@@ -20,11 +20,36 @@ BLEService        ringService(RING_SERVICE_UUID);
 BLECharacteristic ringCmdChar(RING_CMD_CHAR_UUID);
 
 bool ringing = false;
-static unsigned long greenLedUntil = 0;
-
-static uint16_t pairedScannerCrc = 0;   // CRC16 du bracelet propriétaire (0 = non appairé)
+static unsigned long scannerLastSeenMs = 0;  // ts du dernier paquet KC-Scanner reçu
+static int           scannerRssi       = 0;
+static float         scannerRssiEma    = 0.0f;
+static float         scannerDistance   = -1.0f;
+static uint16_t pairedScannerCrc = 0;
 static bool     pendingAdvRebuild = false;
 static File     flashFile(InternalFS);
+
+static inline void setRgbLed(bool r, bool g, bool b) {
+  digitalWrite(LED_RED,   r ? LOW : HIGH);
+  digitalWrite(LED_GREEN, g ? LOW : HIGH);
+  digitalWrite(LED_BLUE,  b ? LOW : HIGH);
+}
+
+// Bleu  : non appairé
+// Vert  : appairé, bracelet à portée (distance ≤ PROXIMITY_ALERT_DISTANCE_M)
+// Rouge : appairé, bracelet hors de portée ou signal périmé
+void updateLed() {
+  bool isPaired = (pairedScannerCrc != 0);
+  if (!isPaired) { setRgbLed(false, false, true); return; }
+  static bool prevNear = false;
+  bool fresh = scannerLastSeenMs > 0 &&
+               (millis() - scannerLastSeenMs) < SCANNER_STALE_MS;
+  // Hystérésis : seuil de passage au vert plus bas que seuil de passage au rouge
+  float thr  = prevNear ? PROXIMITY_FAR_DISTANCE_M : PROXIMITY_NEAR_DISTANCE_M;
+  bool near  = fresh && scannerDistance >= 0.0f && scannerDistance <= thr;
+  prevNear   = near;
+  if (near) setRgbLed(false, true,  false);
+  else      setRgbLed(true,  false, false);
+}
 
 void savePairedScannerCrc(uint16_t crc) {
   if (flashFile.open("/scanner.bin", FILE_O_WRITE)) {
@@ -67,26 +92,18 @@ void rebuildScanResponse(uint16_t crc) {
 }
 
 void onConnect(uint16_t conn_handle) {
-  digitalWrite(LED_GREEN, LOW);  // vert allume : scanner connecte
   Serial.println("Scanner connecte");
 }
 
 void onDisconnect(uint16_t conn_handle, uint8_t reason) {
   ringing = false;
-  // Conserver le vert si le timer d'appairage tourne encore
-  if (greenLedUntil == 0 || millis() >= greenLedUntil) {
-    digitalWrite(LED_GREEN, HIGH);
-  }
   Serial.println("Scanner deconnecte");
 }
 
 void onRingCommand(uint16_t conn_handle, BLECharacteristic* chr, uint8_t* data, uint16_t len) {
   if (len < 1) return;
   if (data[0] == RING_CMD_PAIR) {
-    // Appairage confirme : LED verte 5 s, pas de sonnerie
-    digitalWrite(LED_GREEN, LOW);
-    greenLedUntil = millis() + 5000;
-    Serial.println("Appairage confirme — LED verte 5 s");
+    Serial.println("Appairage confirme (commande GATT)");
     return;
   }
   ringing = (data[0] == RING_CMD_START);
@@ -104,17 +121,21 @@ void onScannerFound(ble_gap_evt_adv_report_t* report) {
         BLE_GAP_AD_TYPE_SHORT_LOCAL_NAME, nameBuffer, sizeof(nameBuffer) - 1);
   if (nameLen == 0 || strcmp((char*)nameBuffer, SCANNER_LOCAL_NAME) != 0) return;
 
+  // Mise à jour de la présence du bracelet (pour la LED et la détection de distance)
+  scannerLastSeenMs = millis();
+  scannerRssi     = (int)report->rssi;
+  scannerRssiEma  = (scannerRssiEma == 0.0f) ? scannerRssi
+                    : RSSI_EMA_ALPHA * scannerRssi + (1.0f - RSSI_EMA_ALPHA) * scannerRssiEma;
+  scannerDistance = pow(10.0f, ((float)SCANNER_TX_POWER_AT_1M - scannerRssiEma) / (10.0f * PATH_LOSS_N));
+
   if ((int)report->rssi >= PAIRING_RSSI_THRESHOLD) {
     uint16_t newCrc = crc16(report->peer_addr.addr, 6);
     if (newCrc != pairedScannerCrc) {
       pairedScannerCrc = newCrc;
       pendingAdvRebuild = true;   // rebuild depuis loop(), pas depuis ce callback
-      Serial.print("Nouveau bracelet propriétaire, CRC=0x");
+      Serial.print("[appairage] nouveau bracelet, CRC=0x");
       Serial.println(newCrc, HEX);
     }
-    digitalWrite(LED_GREEN, LOW);
-    greenLedUntil = millis() + 5000;
-    Serial.println("Appairage confirme — LED verte 5 s");
   }
 }
 
@@ -130,8 +151,9 @@ void setup() {
 
   pinMode(PIN_BUZZER, OUTPUT);
   digitalWrite(PIN_BUZZER, LOW);
-  pinMode(LED_GREEN, OUTPUT);
-  digitalWrite(LED_GREEN, HIGH);  // eteinte au demarrage
+  pinMode(LED_RED,   OUTPUT); digitalWrite(LED_RED,   HIGH);
+  pinMode(LED_GREEN, OUTPUT); digitalWrite(LED_GREEN, HIGH);
+  pinMode(LED_BLUE,  OUTPUT); digitalWrite(LED_BLUE,  HIGH);
 
   InternalFS.begin();
   pairedScannerCrc = loadPairedScannerCrc();
@@ -189,12 +211,40 @@ void loop() {
     rebuildScanResponse(pairedScannerCrc);
   }
 
-  if (greenLedUntil > 0 && millis() >= greenLedUntil) {
-    greenLedUntil = 0;
-    if (!Bluefruit.connected()) {
-      digitalWrite(LED_GREEN, HIGH);
-    }
-  }
+  updateLed();
   updateBuzzer();
+
+  static unsigned long lastHb = 0;
+  if (millis() - lastHb >= 5000) {
+    lastHb = millis();
+    Serial.print("[hb tag] t=");
+    Serial.print(millis() / 1000);
+    Serial.print("s  appaire=");
+    Serial.print(pairedScannerCrc != 0 ? "oui" : "non");
+    if (pairedScannerCrc != 0) {
+      Serial.print("  CRC=0x");
+      Serial.print(pairedScannerCrc, HEX);
+      unsigned long scannerAge = (scannerLastSeenMs > 0) ? millis() - scannerLastSeenMs : UINT32_MAX;
+      bool stale = (scannerLastSeenMs == 0) || (scannerAge > SCANNER_STALE_MS);
+      if (!stale) {
+        Serial.print("  bracelet ");
+        Serial.print(scannerDistance, 1);
+        Serial.print("m ");
+        Serial.print(scannerRssi);
+        Serial.print("dBm(");
+        Serial.print((int)scannerRssiEma);
+        Serial.print("ema)  vu il y a ");
+        Serial.print(scannerAge / 1000);
+        Serial.print("s");
+      } else if (scannerLastSeenMs == 0) {
+        Serial.print("  bracelet jamais detecte");
+      } else {
+        Serial.print("  bracelet hors de portee depuis ");
+        Serial.print(scannerAge / 1000);
+        Serial.print("s");
+      }
+    }
+    Serial.println();
+  }
   // TODO: mise en veille basse consommation entre les connexions
 }
