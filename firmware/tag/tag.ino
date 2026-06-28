@@ -151,7 +151,11 @@ void onScannerFound(ble_gap_evt_adv_report_t* report) {
 }
 
 void updateBuzzer() {
-  digitalWrite(PIN_BUZZER, (ringing && !ringAcked) ? HIGH : LOW);
+  if (!ringing || ringAcked) { digitalWrite(PIN_BUZZER, LOW); return; }
+  // Bip-bip : 100 ms ON — 100 ms OFF — 100 ms ON — 700 ms silence (période 1 s)
+  unsigned long t = millis() % 1000UL;
+  bool bip = (t < 100) || (t >= 200 && t < 300);
+  digitalWrite(PIN_BUZZER, bip ? HIGH : LOW);
 }
 
 void setup() {
