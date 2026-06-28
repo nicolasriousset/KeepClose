@@ -21,7 +21,10 @@ BLECharacteristic ringCmdChar(RING_CMD_CHAR_UUID);
 
 bool ringing = false;
 static bool          ledAlert          = false;  // bracelet signale que cette balise est hors-rayon
+static bool          ringAcked         = false;  // utilisateur a acquitté la sonnerie en cours
 static unsigned long scannerLastSeenMs = 0;       // ts du dernier paquet KC-Scanner reçu
+static bool          tagLastBtnState   = HIGH;
+static unsigned long tagLastBtnChangeMs = 0;
 static uint16_t ownTagCrc        = 0;
 static uint16_t pairedScannerCrc = 0;
 static bool     pendingAdvRebuild = false;
@@ -130,7 +133,9 @@ void onScannerFound(ble_gap_evt_adv_report_t* report) {
     uint16_t ringHash  = (uint16_t)mfrBuf[4] | ((uint16_t)mfrBuf[5] << 8);
     if (compId == PAIRING_MANUFACTURER_ID) {
       ledAlert = (alertHash != 0 && alertHash == ownTagCrc);
-      ringing  = (ringHash  != 0 && ringHash  == ownTagCrc);
+      bool newRing = (ringHash != 0 && ringHash == ownTagCrc);
+      if (ringing && !newRing) ringAcked = false;  // bracelet a coupe le ring → reset pour la prochaine fois
+      ringing = newRing;
     }
   }
 
@@ -146,8 +151,7 @@ void onScannerFound(ble_gap_evt_adv_report_t* report) {
 }
 
 void updateBuzzer() {
-  // TODO: generer une tonalite sur PIN_BUZZER (tone() ou PWM)
-  digitalWrite(PIN_BUZZER, ringing ? HIGH : LOW);
+  digitalWrite(PIN_BUZZER, (ringing && !ringAcked) ? HIGH : LOW);
 }
 
 void setup() {
@@ -157,6 +161,7 @@ void setup() {
 
   pinMode(PIN_BUZZER, OUTPUT);
   digitalWrite(PIN_BUZZER, LOW);
+  pinMode(PIN_BUTTON, INPUT_PULLUP);
   pinMode(LED_RED,   OUTPUT); digitalWrite(LED_RED,   HIGH);
   pinMode(LED_GREEN, OUTPUT); digitalWrite(LED_GREEN, HIGH);
   pinMode(LED_BLUE,  OUTPUT); digitalWrite(LED_BLUE,  HIGH);
@@ -217,6 +222,18 @@ void loop() {
     pendingAdvRebuild = false;
     savePairedScannerCrc(pairedScannerCrc);
     rebuildScanResponse(pairedScannerCrc);
+  }
+
+  // Bouton : acquitter la sonnerie en cours
+  bool btnRaw = digitalRead(PIN_BUTTON);
+  unsigned long now = millis();
+  if (btnRaw != tagLastBtnState && now - tagLastBtnChangeMs > BUTTON_DEBOUNCE_MS) {
+    tagLastBtnState   = btnRaw;
+    tagLastBtnChangeMs = now;
+    if (btnRaw == LOW && ringing && !ringAcked) {
+      ringAcked = true;
+      Serial.println("[btn tag] sonnerie acquittee");
+    }
   }
 
   updateLed();

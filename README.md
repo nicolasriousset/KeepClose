@@ -1,61 +1,13 @@
-# KeepClose
+# KeepClose v2
 
-**KeepClose** est un système embarqué de détection de proximité BLE destiné aux personnes malvoyantes, pour prévenir la perte d'objets essentiels (ex. canne blanche).
-
----
-
-## Architecture v2 — XIAO BLE nRF52840
-
-La v2 utilise deux modules **Seeed Studio XIAO BLE nRF52840** et supporte deux projets :
-
-| Projet | Comportement |
-|--------|-------------|
-| **N.I.C.O.** | Le bracelet vibre quand la balise (canne) sort du rayon |
-| **Ti Poucet** | Le bracelet sonne la balise la plus proche pour guider l'utilisateur sur un chemin |
-
-| Module | Rôle | Firmware |
-|--------|------|----------|
-| **Tag** | Balise BLE posable sur un objet ; sonne sur commande | `firmware/tag/tag.ino` |
-| **Scanner** | Bracelet porté par l'utilisateur | `firmware/scanner/scanner.ino` |
-
-Le projet actif se sélectionne dans `firmware/scanner/config.h` (`#define PROJECT_NICO` ou `#define PROJECT_TIPOUCET`).
-
-```
-firmware/
-├── common/
-│   └── config.h               # UUID BLE, seuils, commande ring
-├── tag/
-│   ├── config.h               # TX power, brochage buzzer
-│   └── tag.ino                # Advertising + service GATT ring
-└── scanner/
-    ├── config.h               # Sélection projet, brochage, timeouts
-    ├── scanner_core.h         # Registre multi-balises, estimation distance, ring
-    ├── project_nico.h         # Comportement N.I.C.O.
-    ├── project_tipoucet.h     # Comportement Ti Poucet
-    └── scanner.ino            # setup/loop — inclut le bon module projet
-```
-
----
-
-## Protocole BLE
-
-Le tag est un **périphérique GATT** (pas un simple advertiser) :
-- Il advertise en continu pour être détectable par le scanner
-- Il expose un service GATT avec une caractéristique `ring` (write)
-- Commandes : `0x01` = sonnerie ON, `0x00` = sonnerie OFF
+Système embarqué de détection de proximité BLE pour personnes malvoyantes.
+Cas d'usage principal : alerter si la canne blanche sort du périmètre.
 
 ---
 
 ## Matériel
 
-### Composants
-
-| Composant | Rôle | Qté |
-|-----------|------|-----|
-| Seeed Studio XIAO BLE nRF52840 | Microcontrôleur + BLE | 2 |
-| Moteur vibrant | Alerte haptique (bracelet) | 1 |
-| Buzzer piézo | Sonnerie (balise) | 1 |
-| Résistance 220 Ω | Protection LED/moteur | selon besoin |
+Deux modules **Seeed Studio XIAO BLE nRF52840**, un par appareil.
 
 ### Brochage XIAO BLE nRF52840
 
@@ -74,90 +26,221 @@ D6   │●        ●│ D7  / RX
      └──────────┘
 ```
 
-> **Attention** : le GND est la **2ème broche depuis le haut à droite** (côté USB-C),
-> pas en bas. Les broches de puissance (3V3, GND, VUSB) sont du côté USB,
-> les broches D7–D10 sont du côté opposé.
-
-### Affectation des broches par firmware
-
-| Broche | Scanner (bracelet) | Tag (balise) |
-|--------|--------------------|--------------|
-| D0     | Moteur vibrant     | —            |
-| D1     | Buzzer             | Buzzer       |
-| LED_BUILTIN | LED statut    | LED statut   |
-
-### Soudure des pin headers
-
-Les modules sont livrés sans pins soudés. Avant toute utilisation :
-
-1. Insérer les deux barrettes de 7 pins dans une breadboard (elles maintiennent l'alignement)
-2. Poser le module par-dessus
-3. Souder chaque pin en moins de 3 secondes — joint brillant et conique = bonne soudure
-4. Vérifier l'absence de ponts entre broches adjacentes
-
-Utiliser `firmware/test/test.ino` pour valider toutes les soudures avant de continuer.
+LEDs intégrées : active LOW (LOW = allumée, HIGH = éteinte).
+GND = 2e broche depuis le haut à droite (côté USB-C).
 
 ---
 
-## Installation de l'environnement de développement
+## Architecture électronique
 
-### 1. Installer l'IDE Arduino
+### Bracelet (scanner)
 
-Télécharger la dernière version depuis [arduino.cc/en/software](https://www.arduino.cc/en/software).
+| Broche | Composant | Notes |
+|--------|-----------|-------|
+| D0 | Moteur vibrant | Via transistor 2N2222 |
+| D1 | Bouton push | Actif bas, pull-up interne |
+| LED_RED / LED_GREEN / LED_BLUE | LED RGB intégrée | Tricolore |
 
-### 2. Ajouter le board package Seeed nRF52
+**Câblage moteur vibrant (D0) :**
 
-- Ouvrir **Fichier → Préférences**
-- Ajouter dans *URL de gestionnaire de cartes supplémentaires* :
-  ```
-  https://files.seeedstudio.com/arduino/package_seeeduino_boards_index.json
-  ```
-- Aller dans **Outils → Type de carte → Gestionnaire de cartes**
-- Rechercher **Seeed nRF52** et installer le package
+```
+3V3 ──────────────── Moteur (+)
+                          │
+                     [1N4148]   cathode=3V3, anode=collecteur
+                          │
+D0 ──[1kΩ]── Base    Collecteur ── Moteur (-)
+               \    /
+             2N2222
+                │
+            Émetteur
+                │
+               GND
+```
 
-### 3. Sélectionner la carte
+Brochage 2N2222 TO-92 (face plate vers soi, pattes vers le bas) : Émetteur (gauche) — Base (milieu) — Collecteur (droite).
 
-**Outils → Type de carte → Seeed nRF52 Boards → Seeed XIAO nRF52840**
+**Câblage bouton (D1) :**
 
-> Choisir **Seeed XIAO nRF52840** (pas la variante Sense).
-> Le menu `Outils` doit afficher `SoftDevice: S140 7.3.0` — c'est normal.
+```
+D1 ──── [Bouton] ──── GND
+```
 
-### 4. Bibliothèques requises
+Pas de résistance externe, pull-up interne activée par `INPUT_PULLUP`.
 
-- **Adafruit_TinyUSB** — nécessaire pour que `Serial` compile avec ce BSP.
-  Inclure `#include <Adafruit_TinyUSB.h>` en tête de chaque sketch qui utilise Serial.
+---
 
-> La bibliothèque ArduinoBLE standard (Arduino.cc) n'est pas compatible avec
-> le SoftDevice S140 de ce BSP. La prise en charge BLE est intégrée au BSP.
+### Balise (tag)
 
-### 5. Compiler et téléverser
+| Broche | Composant | Notes |
+|--------|-----------|-------|
+| D1 | Buzzer actif 12 mm | Connexion directe |
+| D2 | Bouton push | Actif bas, pull-up interne |
+| LED_RED / LED_GREEN / LED_BLUE | LED RGB intégrée | Tricolore |
 
-Le BSP utilise le **bootloader DFU** — le téléversement se fait en deux temps :
+**Câblage buzzer actif (D1) :**
 
-1. Double-appuyer rapidement sur le bouton **RST** du module
-   → la LED orange pulse, un nouveau port COM (ex. COM5) apparaît
-2. Sélectionner ce port dans **Outils → Port**
-3. Cliquer **Téléverser** dans l'IDE
-4. Après l'upload, le module redémarre et un port COM applicatif réapparaît
+```
+D1 ──── Buzzer (+)
+GND ─── Buzzer (-)
+```
 
-Pour le moniteur série, utiliser ce port applicatif (pas le port DFU).
+Utiliser un buzzer **actif** (avec marquage "+", ~12 mm) — pas un piézo passif.
+Le "+" sur D1, l'autre fil sur GND.
 
-Chaque sketch utilisant Serial doit inclure ce pattern de démarrage :
+**Câblage bouton (D2) :**
 
-```cpp
-Serial.begin(115200);
-unsigned long t = millis();
-while (!Serial && millis() - t < 5000);  // attend le moniteur, max 5 s
+```
+D2 ──── [Bouton] ──── GND
 ```
 
 ---
 
-## Code V1 (archive)
+## Comportement
 
-Le code de la v1 (LilyGo T-Watch 2020 V3 / ESP32 / NimBLE / LVGL) est conservé dans [`legacy/`](legacy/) — voir [`legacy/README.md`](legacy/README.md) pour les instructions d'installation.
+### LED bracelet
+
+| Couleur | Signification |
+|---------|--------------|
+| Bleu | Actif, aucune balise appairée |
+| Vert | Balise(s) appairée(s) à portée |
+| Rouge | Au moins une balise appairée hors périmètre |
+
+### LED balise
+
+| Couleur | Signification |
+|---------|--------------|
+| Bleu | Non appairée |
+| Vert | Appairée, bracelet à portée |
+| Rouge | Appairée, bracelet hors périmètre ou signal perdu |
+
+### Bouton bracelet (D1) — 3 comportements selon l'état
+
+| Situation | Action |
+|-----------|--------|
+| Ring en cours | Annule le ring (balise arrête de sonner) |
+| Moteur vibre (balise hors périmètre) | Snooze : moteur s'arrête. Reprend automatiquement à la prochaine sortie du périmètre après un retour dans le rayon |
+| Rien (balise à portée) | Démarre le ring : la balise appairée la plus proche sonne pendant 10 s |
+
+### Bouton balise (D2)
+
+| Situation | Action |
+|-----------|--------|
+| Buzzer en cours | Acquitte la sonnerie (buzzer s'arrête). Se réinitialise automatiquement quand le bracelet arrête de publier le ring |
 
 ---
 
-## Licence
+## Architecture logicielle
 
-Projet open-source sous licence MIT.
+### Protocole BLE
+
+Le bracelet advertise en continu (`KC-Scanner`, 300 ms).
+Son paquet **manufacturer data** contient :
+
+```
+[company_id : 2 octets] [alertHash : 2 octets] [ringHash : 2 octets]
+```
+
+- **alertHash** : CRC16 de l'adresse MAC de la balise hors-périmètre la plus proche (0 si toutes à portée)
+- **ringHash** : CRC16 de la balise à faire sonner (0 si aucune sonnerie en cours)
+
+Chaque balise calcule son propre CRC16 au démarrage (`ownTagCrc`).
+À chaque paquet reçu du bracelet :
+- `alertHash == ownTagCrc` → LED rouge
+- `ringHash == ownTagCrc` → buzzer ON
+- Sinon → LED verte (si signal frais) ou rouge (si signal périmé)
+
+La balise advertise aussi en continu (`KC-Tag`) avec son CRC dans le scan response :
+le bracelet l'utilise pour détecter un appairage exclusif (balise déjà liée à un autre bracelet).
+
+### Appairage
+
+Coller balise et bracelet à moins de ~5 cm pendant **3 secondes**.
+Confirmation : 3 vibrations courtes sur le bracelet.
+L'appairage est sauvegardé en flash (survit aux redémarrages).
+Une balise ne peut être appairée qu'à un seul bracelet à la fois.
+
+### Estimation de distance (bracelet)
+
+Le bracelet estime la distance de chaque balise appairée via le RSSI :
+
+```
+distance = 10 ^ ((TX_POWER_AT_1M - rssiEma) / (10 × PATH_LOSS_N))
+```
+
+- `TX_POWER_AT_1M = -61 dBm` (calibré à 1 m)
+- `PATH_LOSS_N = 2.0` (espace libre)
+- EMA sur le RSSI : `alpha = 0.1` (lissage fort)
+- Hystérésis : passage rouge→vert à 45 cm, vert→rouge à 55 cm
+
+La balise ne calcule pas de distance — elle réagit uniquement aux champs alertHash/ringHash publiés par le bracelet.
+
+### Multi-balises
+
+Le bracelet peut gérer jusqu'à 10 balises appairées simultanément.
+Règle d'alerte : parmi les balises hors périmètre, le bracelet publie le CRC de la **plus proche** dans alertHash. L'utilisateur la récupère en premier, puis le bracelet passe à la suivante.
+
+### Structure des fichiers
+
+```
+firmware/
+├── common/
+│   └── config.h              # Seuils partagés, CRC16, constantes BLE
+├── test/
+│   └── test.ino              # Test de soudures (phases 1-5)
+├── tag/
+│   ├── config.h              # TX power, brochage, timeouts
+│   └── tag.ino               # Advertising + scan scanner + buzzer + bouton
+└── scanner/
+    ├── config.h              # Sélection projet, brochage, durées
+    ├── scanner_core.h        # BeaconRegistry, appairage, estimation distance
+    ├── project_nico.h        # Comportement N.I.C.O. (moteur + bouton + ring)
+    ├── project_tipoucet.h    # Comportement Ti Poucet (sonnerie chemin)
+    └── scanner.ino           # setup/loop, advertising, macros PROJECT_*
+```
+
+Sélectionner le mode dans `firmware/scanner/config.h` :
+```cpp
+#define PROJECT_NICO      // alerte vibration canne blanche
+// #define PROJECT_TIPOUCET  // guide par sonnerie successive
+```
+
+---
+
+## Installation
+
+### Board package
+
+- Ouvrir **Fichier → Préférences** dans l'IDE Arduino
+- Ajouter dans *URL de gestionnaire de cartes supplémentaires* :
+  ```
+  https://files.seeedstudio.com/arduino/package_seeeduino_boards_index.json
+  ```
+- **Outils → Gestionnaire de cartes** → installer **Seeed nRF52**
+- Sélectionner : **Seeed nRF52 Boards → Seeed XIAO nRF52840** (pas la variante Sense)
+
+### Téléversement
+
+Le module utilise le bootloader DFU :
+
+1. Double-appuyer sur **RST** → LED orange pulse, nouveau port COM (DFU) apparaît
+2. Sélectionner ce port dans **Outils → Port**
+3. Cliquer **Téléverser**
+4. Après upload, sélectionner le port applicatif pour le moniteur série
+
+### Validation des soudures
+
+Téléverser `firmware/test/test.ino` avant tout autre firmware :
+
+| Phase | Test |
+|-------|------|
+| 1 | Communication série (USB + puce) |
+| 2 | LEDs RGB intégrées |
+| 3 | GPIO broche par broche (LED externe + 220 Ω) |
+| 4 | BLE (advertising visible depuis smartphone) |
+| 5 | Moteur vibrant D0 (3 impulsions + 1 longue) |
+
+---
+
+## Archive v1
+
+Code de la v1 (LilyGo T-Watch 2020 V3 / ESP32 / NimBLE) conservé dans [`legacy/`](legacy/).

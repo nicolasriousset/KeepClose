@@ -115,7 +115,12 @@ void nicoLoop(BeaconRegistry& registry) {
   }
 
   if (btnPressed) {
-    if (shouldVibrate) {
+    if (nicoRingActive) {
+      // ── Annuler le ring en cours ──────────────────────────────────────────
+      nicoRingActive = false;
+      nicoRingHash   = 0;
+      Serial.println("[btn] ring annule");
+    } else if (shouldVibrate) {
       // ── Snooze : suspendre l'alerte jusqu'au prochain retour en périmètre ──
       for (int i = 0; i < registry.count; i++) {
         BeaconInfo& b = registry.beacons[i];

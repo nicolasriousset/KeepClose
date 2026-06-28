@@ -20,4 +20,8 @@
 
 // Brochage XIAO BLE nRF52840
 #define PIN_BUZZER              D1      // Buzzer piézo (sonnerie sur commande ring)
+#define PIN_BUTTON              D2      // Interrupteur push (actif bas, pull-up interne)
 #define PIN_LED_STATUS          LED_BUILTIN
+
+// Anti-rebond bouton (ms)
+#define BUTTON_DEBOUNCE_MS      50
