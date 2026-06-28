@@ -25,6 +25,7 @@ struct BeaconInfo {
   float         distance;
   int           rssi;      // RSSI brut du dernier paquet (pour affichage)
   float         rssiEma;   // RSSI lissé par EMA (pour distance et LED)
+  uint16_t      tagCrc;    // CRC16 MAC de la balise — identifiant compact publié dans l'advertising
   bool          paired;
   bool          snoozed;
   unsigned long lastSeenMs;
@@ -56,6 +57,7 @@ public:
     n.distance       = -1.0f;
     n.rssi           = 0;
     n.rssiEma        = 0.0f;  // 0 = pas encore de mesure
+    n.tagCrc         = 0;
     n.paired         = false;
     n.snoozed        = false;
     n.lastSeenMs     = 0;

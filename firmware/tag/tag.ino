@@ -20,10 +20,9 @@ BLEService        ringService(RING_SERVICE_UUID);
 BLECharacteristic ringCmdChar(RING_CMD_CHAR_UUID);
 
 bool ringing = false;
-static unsigned long scannerLastSeenMs = 0;  // ts du dernier paquet KC-Scanner reçu
-static int           scannerRssi       = 0;
-static float         scannerRssiEma    = 0.0f;
-static float         scannerDistance   = -1.0f;
+static bool          ledAlert          = false;  // bracelet signale que cette balise est hors-rayon
+static unsigned long scannerLastSeenMs = 0;       // ts du dernier paquet KC-Scanner reçu
+static uint16_t ownTagCrc        = 0;
 static uint16_t pairedScannerCrc = 0;
 static bool     pendingAdvRebuild = false;
 static File     flashFile(InternalFS);
@@ -35,20 +34,16 @@ static inline void setRgbLed(bool r, bool g, bool b) {
 }
 
 // Bleu  : non appairé
-// Vert  : appairé, bracelet à portée (distance ≤ PROXIMITY_ALERT_DISTANCE_M)
-// Rouge : appairé, bracelet hors de portée ou signal périmé
+// Vert  : appairé, bracelet à portée (ledAlert == false, signal frais)
+// Rouge : appairé et le bracelet signale que cette balise est hors-rayon,
+//         ou signal du bracelet périmé
 void updateLed() {
   bool isPaired = (pairedScannerCrc != 0);
   if (!isPaired) { setRgbLed(false, false, true); return; }
-  static bool prevNear = false;
   bool fresh = scannerLastSeenMs > 0 &&
                (millis() - scannerLastSeenMs) < SCANNER_STALE_MS;
-  // Hystérésis : seuil de passage au vert plus bas que seuil de passage au rouge
-  float thr  = prevNear ? PROXIMITY_FAR_DISTANCE_M : PROXIMITY_NEAR_DISTANCE_M;
-  bool near  = fresh && scannerDistance >= 0.0f && scannerDistance <= thr;
-  prevNear   = near;
-  if (near) setRgbLed(false, true,  false);
-  else      setRgbLed(true,  false, false);
+  if (fresh && !ledAlert) setRgbLed(false, true,  false);
+  else                    setRgbLed(true,  false, false);
 }
 
 void savePairedScannerCrc(uint16_t crc) {
@@ -121,12 +116,23 @@ void onScannerFound(ble_gap_evt_adv_report_t* report) {
         BLE_GAP_AD_TYPE_SHORT_LOCAL_NAME, nameBuffer, sizeof(nameBuffer) - 1);
   if (nameLen == 0 || strcmp((char*)nameBuffer, SCANNER_LOCAL_NAME) != 0) return;
 
-  // Mise à jour de la présence du bracelet (pour la LED et la détection de distance)
+  // Mise à jour de la présence du bracelet
   scannerLastSeenMs = millis();
-  scannerRssi     = (int)report->rssi;
-  scannerRssiEma  = (scannerRssiEma == 0.0f) ? scannerRssi
-                    : RSSI_EMA_ALPHA * scannerRssi + (1.0f - RSSI_EMA_ALPHA) * scannerRssiEma;
-  scannerDistance = pow(10.0f, ((float)SCANNER_TX_POWER_AT_1M - scannerRssiEma) / (10.0f * PATH_LOSS_N));
+
+  // Lire alertHash et ringHash depuis le manufacturer data du bracelet
+  // Format : [company_id(2) | alertHash(2) | ringHash(2)]
+  uint8_t mfrBuf[8] = { 0 };
+  uint8_t mfrLen = Bluefruit.Scanner.parseReportByType(report,
+      BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA, mfrBuf, sizeof(mfrBuf));
+  if (mfrLen >= 6) {
+    uint16_t compId    = (uint16_t)mfrBuf[0] | ((uint16_t)mfrBuf[1] << 8);
+    uint16_t alertHash = (uint16_t)mfrBuf[2] | ((uint16_t)mfrBuf[3] << 8);
+    uint16_t ringHash  = (uint16_t)mfrBuf[4] | ((uint16_t)mfrBuf[5] << 8);
+    if (compId == PAIRING_MANUFACTURER_ID) {
+      ledAlert = (alertHash != 0 && alertHash == ownTagCrc);
+      ringing  = (ringHash  != 0 && ringHash  == ownTagCrc);
+    }
+  }
 
   if ((int)report->rssi >= PAIRING_RSSI_THRESHOLD) {
     uint16_t newCrc = crc16(report->peer_addr.addr, 6);
@@ -159,6 +165,8 @@ void setup() {
   pairedScannerCrc = loadPairedScannerCrc();
 
   Bluefruit.begin(1, 1);  // 1 periph (advertising) + 1 central (scan KC-Scanner)
+  ownTagCrc = crc16(Bluefruit.getAddr().addr, 6);
+  Serial.print("[tag] ownTagCrc=0x"); Serial.println(ownTagCrc, HEX);
   Bluefruit.Periph.setConnectCallback(onConnect);
   Bluefruit.Periph.setDisconnectCallback(onDisconnect);
   Bluefruit.setName(BEACON_LOCAL_NAME);
@@ -222,26 +230,21 @@ void loop() {
     Serial.print("s  appaire=");
     Serial.print(pairedScannerCrc != 0 ? "oui" : "non");
     if (pairedScannerCrc != 0) {
-      Serial.print("  CRC=0x");
-      Serial.print(pairedScannerCrc, HEX);
+      Serial.print("  CRC=0x"); Serial.print(pairedScannerCrc, HEX);
       unsigned long scannerAge = (scannerLastSeenMs > 0) ? millis() - scannerLastSeenMs : UINT32_MAX;
-      bool stale = (scannerLastSeenMs == 0) || (scannerAge > SCANNER_STALE_MS);
-      if (!stale) {
-        Serial.print("  bracelet ");
-        Serial.print(scannerDistance, 1);
-        Serial.print("m ");
-        Serial.print(scannerRssi);
-        Serial.print("dBm(");
-        Serial.print((int)scannerRssiEma);
-        Serial.print("ema)  vu il y a ");
-        Serial.print(scannerAge / 1000);
-        Serial.print("s");
-      } else if (scannerLastSeenMs == 0) {
+      if (scannerLastSeenMs == 0) {
         Serial.print("  bracelet jamais detecte");
-      } else {
-        Serial.print("  bracelet hors de portee depuis ");
+      } else if (scannerAge > SCANNER_STALE_MS) {
+        Serial.print("  bracelet absent depuis ");
         Serial.print(scannerAge / 1000);
         Serial.print("s");
+      } else {
+        Serial.print("  vu il y a ");
+        Serial.print(scannerAge / 1000);
+        Serial.print("s  alerte=");
+        Serial.print(ledAlert ? "oui" : "non");
+        Serial.print("  ring=");
+        Serial.print(ringing  ? "oui" : "non");
       }
     }
     Serial.println();

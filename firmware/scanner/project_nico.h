@@ -48,6 +48,23 @@ void nicoLedUpdate(BeaconRegistry& reg, bool pairingActive) {
   else                setRgbLed(false, false, true);
 }
 
+// Retourne le tagCrc de la balise appairée hors-rayon la plus proche.
+// 0 si toutes les balises sont à portée ou qu'aucune n'est appairée.
+// "Plus proche" parmi les hors-rayon → l'utilisateur la récupère en premier.
+uint16_t nicoComputeAlert(BeaconRegistry& reg) {
+  BeaconInfo* alertBeacon = nullptr;
+  float alertDist = 1e9f;
+  for (int i = 0; i < reg.count; i++) {
+    BeaconInfo& b = reg.beacons[i];
+    if (!b.paired || b.tagCrc == 0) continue;
+    bool oor = !b.isAlive() || b.rssiEma == 0.0f || b.distance > PROXIMITY_FAR_DISTANCE_M;
+    if (!oor) continue;
+    float d = (b.isAlive() && b.distance >= 0.0f) ? b.distance : 1e9f;
+    if (!alertBeacon || d < alertDist) { alertDist = d; alertBeacon = &b; }
+  }
+  return alertBeacon ? alertBeacon->tagCrc : 0;
+}
+
 void nicoSetup() {
   pinMode(PIN_VIBRATION, OUTPUT);
   digitalWrite(PIN_VIBRATION, LOW);

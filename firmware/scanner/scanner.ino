@@ -22,21 +22,48 @@
 
 #if defined(PROJECT_NICO)
   #include "project_nico.h"
-  #define PROJECT_SETUP()          nicoSetup()
-  #define PROJECT_LOOP(reg)        nicoLoop(reg)
+  #define PROJECT_SETUP()           nicoSetup()
+  #define PROJECT_LOOP(reg)         nicoLoop(reg)
   #define PROJECT_LED(reg, pairing) nicoLedUpdate(reg, pairing)
+  #define PROJECT_ALERT(reg)        nicoComputeAlert(reg)
 #elif defined(PROJECT_TIPOUCET)
   #include "project_tipoucet.h"
-  #define PROJECT_SETUP()          tipoucetSetup()
-  #define PROJECT_LOOP(reg)        tipoucetLoop(reg)
+  #define PROJECT_SETUP()           tipoucetSetup()
+  #define PROJECT_LOOP(reg)         tipoucetLoop(reg)
   #define PROJECT_LED(reg, pairing) /* LED non gérée en mode Ti Poucet */
+  #define PROJECT_ALERT(reg)        ((uint16_t)0)
 #else
   #error "Definir PROJECT_NICO ou PROJECT_TIPOUCET dans firmware/scanner/config.h"
 #endif
 
 BeaconRegistry registry;
 
-static unsigned long pairingLedUntil = 0;
+static unsigned long pairingLedUntil      = 0;
+static uint16_t      currentAlertHash     = 0;
+static uint16_t      currentRingHash      = 0;
+static bool          pendingAdvRebuild    = false;
+
+// Reconstruit l'advertising avec les hashes d'alerte et de sonnerie courants.
+// À appeler depuis loop() uniquement (pas depuis un callback BLE).
+void rebuildScannerAdvertising() {
+  Bluefruit.Advertising.stop();
+  Bluefruit.Advertising.clearData();
+  Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
+  Bluefruit.Advertising.addName();
+  uint8_t mfr[6] = {
+    (uint8_t)(PAIRING_MANUFACTURER_ID & 0xFF),
+    (uint8_t)(PAIRING_MANUFACTURER_ID >> 8),
+    (uint8_t)(currentAlertHash & 0xFF),
+    (uint8_t)(currentAlertHash >> 8),
+    (uint8_t)(currentRingHash  & 0xFF),
+    (uint8_t)(currentRingHash  >> 8)
+  };
+  Bluefruit.Advertising.addManufacturerData(mfr, sizeof(mfr));
+  Bluefruit.Advertising.setInterval(480, 480);
+  Bluefruit.Advertising.start(0);
+  Serial.print("[adv scanner] alertHash=0x"); Serial.print(currentAlertHash, HEX);
+  Serial.print(" ringHash=0x");               Serial.println(currentRingHash, HEX);
+}
 
 // 3 vibrations courtes = confirmation haptique
 void confirmPairing() {
@@ -81,6 +108,11 @@ void onBLEDeviceDiscovered(ble_gap_evt_adv_report_t* report) {
   unsigned long now = millis();
   int rssi = (int)report->rssi;
   b->lastSeenMs = now;
+
+  // Mémoriser le CRC de la balise (identifiant compact pour l'advertising bracelet)
+  if (b->tagCrc == 0) {
+    b->tagCrc = crc16(report->peer_addr.addr, 6);
+  }
 
   // Lire le CRC du bracelet propriétaire depuis le manufacturer data de la balise
   uint8_t mfrBuf[10] = { 0 };
@@ -133,11 +165,17 @@ void setup() {
   Bluefruit.begin(1, 1);  // 1 periph (advertising appairage) + 1 central (scan)
   initOwnCrc();
 
-  // Advertising "KC-Scanner" en continu (intervalle lent = économie d'énergie)
-  // Le tag utilise ces paquets pour détecter la présence et la distance du bracelet.
+  // Advertising "KC-Scanner" en continu.
+  // Manufacturer data : [company_id(2) | alertHash(2) | ringHash(2)]
+  // Les balises lisent ces champs pour connaître leur état LED et buzzer.
   Bluefruit.setName(SCANNER_LOCAL_NAME);
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
   Bluefruit.Advertising.addName();
+  uint8_t mfr0[6] = {
+    (uint8_t)(PAIRING_MANUFACTURER_ID & 0xFF), (uint8_t)(PAIRING_MANUFACTURER_ID >> 8),
+    0, 0, 0, 0  // alertHash=0, ringHash=0 à l'initialisation
+  };
+  Bluefruit.Advertising.addManufacturerData(mfr0, sizeof(mfr0));
   Bluefruit.Advertising.setInterval(480, 480);  // 300 ms (480 × 0.625 ms)
   Bluefruit.Advertising.start(0);               // continu
 
@@ -159,6 +197,17 @@ void setup() {
 void loop() {
   PROJECT_LOOP(registry);
   PROJECT_LED(registry, pairingLedUntil > 0 && millis() < pairingLedUntil);
+
+  // Recalculer l'hash d'alerte et déclencher un rebuild advertising si nécessaire
+  uint16_t newAlert = PROJECT_ALERT(registry);
+  if (newAlert != currentAlertHash) {
+    currentAlertHash  = newAlert;
+    pendingAdvRebuild = true;
+  }
+  if (pendingAdvRebuild) {
+    pendingAdvRebuild = false;
+    rebuildScannerAdvertising();
+  }
 
   static unsigned long lastHb = 0;
   if (millis() - lastHb >= 5000) {
