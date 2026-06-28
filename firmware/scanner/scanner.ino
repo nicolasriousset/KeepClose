@@ -26,12 +26,14 @@
   #define PROJECT_LOOP(reg)         nicoLoop(reg)
   #define PROJECT_LED(reg, pairing) nicoLedUpdate(reg, pairing)
   #define PROJECT_ALERT(reg)        nicoComputeAlert(reg)
+  #define PROJECT_RING(reg)         nicoComputeRing(reg)
 #elif defined(PROJECT_TIPOUCET)
   #include "project_tipoucet.h"
   #define PROJECT_SETUP()           tipoucetSetup()
   #define PROJECT_LOOP(reg)         tipoucetLoop(reg)
   #define PROJECT_LED(reg, pairing) /* LED non gérée en mode Ti Poucet */
   #define PROJECT_ALERT(reg)        ((uint16_t)0)
+  #define PROJECT_RING(reg)         ((uint16_t)0)
 #else
   #error "Definir PROJECT_NICO ou PROJECT_TIPOUCET dans firmware/scanner/config.h"
 #endif
@@ -200,8 +202,10 @@ void loop() {
 
   // Recalculer l'hash d'alerte et déclencher un rebuild advertising si nécessaire
   uint16_t newAlert = PROJECT_ALERT(registry);
-  if (newAlert != currentAlertHash) {
+  uint16_t newRing  = PROJECT_RING(registry);
+  if (newAlert != currentAlertHash || newRing != currentRingHash) {
     currentAlertHash  = newAlert;
+    currentRingHash   = newRing;
     pendingAdvRebuild = true;
   }
   if (pendingAdvRebuild) {

@@ -28,4 +28,10 @@
 
 // Brochage XIAO BLE nRF52840
 #define PIN_VIBRATION           D0      // Moteur vibrant
+#define PIN_BUTTON              D1      // Interrupteur push (actif bas, pull-up interne)
 #define PIN_LED_STATUS          LED_BUILTIN
+
+// Durée de sonnerie balise déclenchée par le bouton (ms)
+#define RING_DURATION_MS        10000
+// Anti-rebond bouton (ms)
+#define BUTTON_DEBOUNCE_MS      50

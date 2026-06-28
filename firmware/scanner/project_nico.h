@@ -11,6 +11,11 @@
 #define VIBRATION_INTERVAL_MS   1000
 
 static unsigned long nicoLastVibrationTime = 0;
+static bool          nicoRingActive        = false;
+static uint16_t      nicoRingHash          = 0;
+static unsigned long nicoRingUntilMs       = 0;
+static bool          nicoLastBtnState      = HIGH;
+static unsigned long nicoLastBtnChangeMs   = 0;
 
 // Active LOW : LOW = allumée, HIGH = éteinte
 static inline void setRgbLed(bool r, bool g, bool b) {
@@ -68,26 +73,87 @@ uint16_t nicoComputeAlert(BeaconRegistry& reg) {
 void nicoSetup() {
   pinMode(PIN_VIBRATION, OUTPUT);
   digitalWrite(PIN_VIBRATION, LOW);
+  pinMode(PIN_BUTTON, INPUT_PULLUP);
   Serial.println("Mode : N.I.C.O.");
 }
 
+// Retourne le tagCrc à sonner (0 si aucune sonnerie active)
+uint16_t nicoComputeRing(BeaconRegistry& reg) {
+  (void)reg;
+  return nicoRingActive ? nicoRingHash : 0;
+}
+
 void nicoLoop(BeaconRegistry& registry) {
-  // Chercher une balise appairée hors du périmètre (signal perdu OU distance > seuil)
+  unsigned long now = millis();
+
+  // ── Dé-snooze automatique : balise revenue dans le périmètre ────────────────
+  for (int i = 0; i < registry.count; i++) {
+    BeaconInfo& b = registry.beacons[i];
+    if (!b.paired || !b.snoozed) continue;
+    if (b.isAlive() && b.rssiEma != 0.0f && b.distance <= PROXIMITY_NEAR_DISTANCE_M) {
+      b.snoozed = false;
+      Serial.print("[btn] snooze leve : "); Serial.println(b.address);
+    }
+  }
+
+  // ── Détection balises hors périmètre (hors-snooze) ──────────────────────────
   bool shouldVibrate = false;
   for (int i = 0; i < registry.count; i++) {
     BeaconInfo& b = registry.beacons[i];
-    if (!b.paired) continue;
+    if (!b.paired || b.snoozed) continue;
     bool oor = !b.isAlive() || b.rssiEma == 0.0f || b.distance > PROXIMITY_FAR_DISTANCE_M;
     if (oor) { shouldVibrate = true; break; }
   }
 
-  unsigned long now = millis();
+  // ── Lecture bouton avec anti-rebond ─────────────────────────────────────────
+  bool btnRaw = digitalRead(PIN_BUTTON);
+  bool btnPressed = false;
+  if (btnRaw != nicoLastBtnState && now - nicoLastBtnChangeMs > BUTTON_DEBOUNCE_MS) {
+    nicoLastBtnState  = btnRaw;
+    nicoLastBtnChangeMs = now;
+    if (btnRaw == LOW) btnPressed = true;  // front descendant = appui
+  }
+
+  if (btnPressed) {
+    if (shouldVibrate) {
+      // ── Snooze : suspendre l'alerte jusqu'au prochain retour en périmètre ──
+      for (int i = 0; i < registry.count; i++) {
+        BeaconInfo& b = registry.beacons[i];
+        if (!b.paired) continue;
+        bool oor = !b.isAlive() || b.rssiEma == 0.0f || b.distance > PROXIMITY_FAR_DISTANCE_M;
+        if (oor) { b.snoozed = true; Serial.print("[btn] snooze : "); Serial.println(b.address); }
+      }
+      shouldVibrate = false;
+    } else {
+      // ── Ring : sonner la balise appairée la plus proche ──────────────────
+      BeaconInfo* nearest = nullptr;
+      for (int i = 0; i < registry.count; i++) {
+        BeaconInfo& b = registry.beacons[i];
+        if (!b.paired || b.tagCrc == 0) continue;
+        if (!nearest || (b.isAlive() && (!nearest->isAlive() || b.distance < nearest->distance)))
+          nearest = &b;
+      }
+      if (nearest) {
+        nicoRingHash    = nearest->tagCrc;
+        nicoRingUntilMs = now + RING_DURATION_MS;
+        nicoRingActive  = true;
+        Serial.print("[btn] ring → 0x"); Serial.println(nicoRingHash, HEX);
+      }
+    }
+  }
+
+  // ── Auto-stop ring après RING_DURATION_MS ───────────────────────────────────
+  if (nicoRingActive && now >= nicoRingUntilMs) {
+    nicoRingActive = false;
+    nicoRingHash   = 0;
+    Serial.println("[btn] ring auto-stop");
+  }
+
+  // ── Vibration ────────────────────────────────────────────────────────────────
   if (shouldVibrate && (now - nicoLastVibrationTime >= VIBRATION_INTERVAL_MS)) {
     digitalWrite(PIN_VIBRATION, HIGH);
     delay(200);
     digitalWrite(PIN_VIBRATION, LOW);
     nicoLastVibrationTime = now;
   }
-
-  // TODO: bouton pour déclencher ringNearestBeacon() et localiser la canne
 }
