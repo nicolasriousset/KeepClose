@@ -72,14 +72,17 @@ void nicoSetup() {
 }
 
 void nicoLoop(BeaconRegistry& registry) {
-  BeaconInfo* cane = registry.nearestActive();
+  // Chercher une balise appairée hors du périmètre (signal perdu OU distance > seuil)
+  bool shouldVibrate = false;
+  for (int i = 0; i < registry.count; i++) {
+    BeaconInfo& b = registry.beacons[i];
+    if (!b.paired) continue;
+    bool oor = !b.isAlive() || b.rssiEma == 0.0f || b.distance > PROXIMITY_FAR_DISTANCE_M;
+    if (oor) { shouldVibrate = true; break; }
+  }
 
-  if (!cane) return;
-
-  bool outOfRange = cane->distance > DISTANCE_WARNING;
   unsigned long now = millis();
-
-  if (outOfRange && (now - nicoLastVibrationTime >= VIBRATION_INTERVAL_MS)) {
+  if (shouldVibrate && (now - nicoLastVibrationTime >= VIBRATION_INTERVAL_MS)) {
     digitalWrite(PIN_VIBRATION, HIGH);
     delay(200);
     digitalWrite(PIN_VIBRATION, LOW);

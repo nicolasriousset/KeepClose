@@ -4,18 +4,22 @@
  *
  * A televerser sur chaque module fraichement soude avant toute autre chose.
  *
- * Phase 1 : Serie     -> verifie USB + chip
- * Phase 2 : LEDs RGB  -> verifie la puce elle-meme (sans cablage externe)
- * Phase 3 : GPIO scan -> verifie chaque broche soudee une par une
- * Phase 4 : BLE       -> verifie l'antenne (necessite ArduinoBLE fonctionnel)
+ * Phase 1 : Serie        -> verifie USB + chip
+ * Phase 2 : LEDs RGB     -> verifie la puce elle-meme (sans cablage externe)
+ * Phase 3 : GPIO scan    -> verifie chaque broche soudee une par une
+ * Phase 4 : BLE          -> verifie l'antenne (necessite ArduinoBLE fonctionnel)
+ * Phase 5 : Moteur D0    -> verifie le moteur vibrant via transistor 2N2222
  *
  * Montage Phase 3 :
  *   broche testee --[220 ohm]--[LED anode]--[LED cathode]-- GND
  *
- * Reglage moniteur serie : 115200 bauds, mode "Nouvelle ligne"
+ * Montage Phase 5 :
+ *   D0 --[1kohm]-- Base(2N2222)
+ *   Collecteur(2N2222) -- Moteur(-) -- Moteur(+) -- 3V3
+ *   Emetteur(2N2222) -- GND
+ *   Diode 1N4148 : anode=collecteur, cathode=3V3
  *
- * Pour activer la Phase 4 BLE, decommentez la ligne suivante
- * apres avoir resolu la bibliotheque BLE :
+ * Reglage moniteur serie : 115200 bauds, mode "Nouvelle ligne"
  */
 
 #include <Adafruit_TinyUSB.h>
@@ -118,6 +122,42 @@ void testBLE() {
 #endif
 }
 
+// ── Phase 5 ──────────────────────────────────────────────────────────────────
+void testMoteur() {
+  Serial.println("\n[Phase 5] Test moteur vibrant (D0 -> transistor 2N2222)");
+  Serial.println("Montage attendu :");
+  Serial.println("  D0 --[1kohm]-- Base -- 2N2222 -- Collecteur -- Moteur(-) -- Moteur(+) -- 3V3");
+  Serial.println("  Emetteur -- GND   |   Diode 1N4148 : anode=collecteur, cathode=3V3");
+  Serial.println();
+
+  pinMode(D0, OUTPUT);
+  digitalWrite(D0, LOW);
+
+  // 3 impulsions courtes pour confirmer que le signal sort bien de D0
+  Serial.println("  3 impulsions courtes (100 ms)...");
+  for (int i = 0; i < 3; i++) {
+    Serial.print("  Impulsion "); Serial.print(i + 1); Serial.println(" : D0=HIGH");
+    digitalWrite(D0, HIGH);
+    delay(100);
+    digitalWrite(D0, LOW);
+    delay(300);
+  }
+
+  // 1 impulsion longue pour sentir clairement la vibration
+  Serial.println("  Impulsion longue (1 s) : D0=HIGH");
+  digitalWrite(D0, HIGH);
+  delay(1000);
+  digitalWrite(D0, LOW);
+
+  Serial.println();
+  Serial.println("  -> Le moteur a-t-il vibre ?");
+  Serial.println("     OUI : montage OK — le probleme dans le firmware scanner est regle.");
+  Serial.println("     NON : verifier l'orientation du transistor (retourner le 2N2222),");
+  Serial.println("            la diode (bande = cathode cote 3V3), et les connexions D0.");
+  Serial.println("  Appuyez sur Entree pour continuer...");
+  attendreEnter();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
@@ -144,6 +184,7 @@ void setup() {
   testLEDsIntegrees();
   testGPIO();
   testBLE();
+  testMoteur();
 
   Serial.println("\n================================");
   Serial.println("  Tous les tests termines !");
