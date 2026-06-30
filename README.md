@@ -37,11 +37,41 @@ GND = 2e broche depuis le haut à droite (côté USB-C).
 
 | Broche | Composant | Notes |
 |--------|-----------|-------|
-| D0 | Moteur vibrant | Via transistor 2N2222 |
+| D0 | Moteur vibrant | Via transistor 2N2222 + diode de roue libre |
 | D1 | Bouton push | Actif bas, pull-up interne |
-| LED_RED / LED_GREEN / LED_BLUE | LED RGB intégrée | Tricolore |
+| BAT+ / BAT− (verso) | LiPo 3.7 V 250 mAh | Connecteur JST 1.25 mm |
+| LED_RED / LED_GREEN / LED_BLUE | LED RGB intégrée | Active LOW |
 
-**Câblage moteur vibrant (D0) :**
+**Schéma complet bracelet :**
+
+```
+                         ┌────┤├────┐  USB-C (recharge batterie)
+                         │  XIAO   │
+            LiPo 3.7 V   │  BLE    │
+            250 mAh   [verso]      │
+            (+) ── BAT+  │         │
+            (-) ── BAT-  │         │
+                         │         │
+          ┌── Moteur (+) │  3V3  ● │
+          │              │         │
+      [1N4148]           │  D0   ● │──[1 kΩ]──┐
+    (roue libre)         │         │           │ Base
+          │              │  D1   ● │──────[Bouton]──── GND
+          └── Collecteur │         │           │
+                    │    │  GND  ● │──── GND   │ (pull-up interne)
+              2N2222│    │         │           ▼
+                    │    │ LED_RED ├── (intégrée, active LOW)
+                Base┘    │ LED_GRN ├── (intégrée, active LOW)
+                 │       │ LED_BLU ├── (intégrée, active LOW)
+              [1 kΩ]     │         │
+                 │       │ P0.14 * ├── enable diviseur batterie (interne)
+                D0       │ P0.29 * ├── lecture tension batterie  (interne)
+                         └─────────┘
+              Émetteur ── GND        * accès interne uniquement
+          Moteur (-) ─── Collecteur
+```
+
+**Détail moteur vibrant (D0) :**
 
 ```
 3V3 ──────────────── Moteur (+)
@@ -67,6 +97,17 @@ D1 ──── [Bouton] ──── GND
 
 Pas de résistance externe, pull-up interne activée par `INPUT_PULLUP`.
 
+**Batterie :**
+
+```
+LiPo 3.7 V 250 mAh
+    (+) ──── BAT+  ┐  pads au verso de la carte
+    (-) ──── BAT-  ┘  connecteur JST 1.25 mm
+```
+
+Recharge automatique via USB-C (BQ25101, ~50 mA, ≈ 5 h pour 250 mAh).
+Niveau affiché dans le heartbeat Serial (`batt=xx%` ou `batt=n/a` si non connectée).
+
 ---
 
 ### Balise (tag)
@@ -75,7 +116,34 @@ Pas de résistance externe, pull-up interne activée par `INPUT_PULLUP`.
 |--------|-----------|-------|
 | D1 | Buzzer actif 12 mm | Connexion directe |
 | D2 | Bouton push | Actif bas, pull-up interne |
-| LED_RED / LED_GREEN / LED_BLUE | LED RGB intégrée | Tricolore |
+| BAT+ / BAT− (verso) | LiPo 3.7 V 250 mAh | Connecteur JST 1.25 mm |
+| LED_RED / LED_GREEN / LED_BLUE | LED RGB intégrée | Active LOW |
+
+**Schéma complet balise :**
+
+```
+                         ┌────┤├────┐  USB-C (recharge batterie)
+                         │  XIAO   │
+            LiPo 3.7 V   │  BLE    │
+            250 mAh   [verso]      │
+            (+) ── BAT+  │         │
+            (-) ── BAT-  │         │
+                         │         │
+                         │  D1   ● │──── Buzzer (+)
+                         │         │     Buzzer (-) ──── GND
+                         │  D2   ● │──────[Bouton]──── GND
+                         │         │      (pull-up interne)
+                         │  GND  ● │──── GND
+                         │         │
+                         │ LED_RED ├── (intégrée, active LOW)
+                         │ LED_GRN ├── (intégrée, active LOW)
+                         │ LED_BLU ├── (intégrée, active LOW)
+                         │         │
+                         │ P0.14 * ├── enable diviseur batterie (interne)
+                         │ P0.29 * ├── lecture tension batterie  (interne)
+                         └─────────┘
+                                      * accès interne uniquement
+```
 
 **Câblage buzzer actif (D1) :**
 
@@ -85,13 +153,23 @@ GND ─── Buzzer (-)
 ```
 
 Utiliser un buzzer **actif** (avec marquage "+", ~12 mm) — pas un piézo passif.
-Le "+" sur D1, l'autre fil sur GND.
 
 **Câblage bouton (D2) :**
 
 ```
 D2 ──── [Bouton] ──── GND
 ```
+
+**Batterie :**
+
+```
+LiPo 3.7 V 250 mAh
+    (+) ──── BAT+  ┐  pads au verso de la carte
+    (-) ──── BAT-  ┘  connecteur JST 1.25 mm
+```
+
+Recharge automatique via USB-C (~50 mA, ≈ 5 h pour 250 mAh).
+Niveau affiché dans le heartbeat Serial (`batt=xx%` ou `batt=n/a` si non connectée).
 
 ---
 
