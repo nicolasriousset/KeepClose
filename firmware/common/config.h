@@ -41,6 +41,28 @@
 // Company ID 0xFFFF = non-assigné (usage prototype)
 #define PAIRING_MANUFACTURER_ID  0xFFFF
 
+// ── Batterie ─────────────────────────────────────────────────────────────────
+// XIAO BLE nRF52840 : diviseur de tension ×½ sur P0.29, enable sur P0.14
+// Valeurs à vérifier selon le BSP utilisé.
+#define PIN_VBAT_ENABLE  14   // P0.14 — active HIGH : connecte le diviseur à l'ADC
+#define PIN_VBAT         29   // P0.29 — tension batterie via diviseur ×½
+
+static inline float readBatteryVoltage() {
+  pinMode(PIN_VBAT_ENABLE, OUTPUT);
+  digitalWrite(PIN_VBAT_ENABLE, HIGH);
+  delay(1);
+  float raw = (float)analogRead(PIN_VBAT);
+  digitalWrite(PIN_VBAT_ENABLE, LOW);
+  float v = raw * 3.6f / 4096.0f * 2.0f;  // ADC 12-bit, Vref 3.6V, ×2 pour le diviseur
+  return (v >= 3.0f && v <= 4.3f) ? v : -1.0f;  // -1 = pas de batterie connectée
+}
+
+static inline int batteryPercent() {
+  float v = readBatteryVoltage();
+  if (v < 0.0f) return -1;
+  return constrain((int)((v - 3.2f) / 1.0f * 100.0f), 0, 100);
+}
+
 // CRC16-CCITT : identifie le bracelet propriétaire (6 octets MAC → uint16_t)
 static inline uint16_t crc16(const uint8_t* data, uint8_t len) {
   uint16_t crc = 0xFFFF;

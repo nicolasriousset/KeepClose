@@ -235,9 +235,12 @@ void loop() {
       sorted[j + 1] = key;
     }
 
+    int batt = batteryPercent();
     Serial.print("[hb] t=");
     Serial.print(millis() / 1000);
-    Serial.print("s  balises vues=");
+    Serial.print("s  batt=");
+    if (batt < 0) Serial.print("n/a"); else { Serial.print(batt); Serial.print("%"); }
+    Serial.print("  balises vues=");
     Serial.print(registry.count);
     Serial.print("  appairees=");
     Serial.print(pairedCount);

@@ -246,9 +246,12 @@ void loop() {
   static unsigned long lastHb = 0;
   if (millis() - lastHb >= 5000) {
     lastHb = millis();
+    int batt = batteryPercent();
     Serial.print("[hb tag] t=");
     Serial.print(millis() / 1000);
-    Serial.print("s  appaire=");
+    Serial.print("s  batt=");
+    if (batt < 0) Serial.print("n/a"); else { Serial.print(batt); Serial.print("%"); }
+    Serial.print("  appaire=");
     Serial.print(pairedScannerCrc != 0 ? "oui" : "non");
     if (pairedScannerCrc != 0) {
       Serial.print("  CRC=0x"); Serial.print(pairedScannerCrc, HEX);
