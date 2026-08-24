@@ -154,6 +154,10 @@ void testMoteur() {
   Serial.println("     OUI : montage OK — le probleme dans le firmware scanner est regle.");
   Serial.println("     NON : verifier l'orientation du transistor (retourner le 2N2222),");
   Serial.println("            la diode (bande = cathode cote 3V3), et les connexions D0.");
+  Serial.println();
+  Serial.println("  -> Le moteur vibre sur USB mais PAS sur batterie ?");
+  Serial.println("     Moteur (+) est soude sur VUSB au lieu de 3V3 (pastilles voisines).");
+  Serial.println("     VUSB = 0 V sans cable USB. Mesurer moteur(+)->GND sur batterie : ~3,3 V attendus.");
   Serial.println("  Appuyez sur Entree pour continuer...");
   attendreEnter();
 }

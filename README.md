@@ -59,6 +59,12 @@ D0 ──[1kΩ]── Base    Collecteur ── Moteur (-)
 
 Brochage 2N2222 TO-92 (face plate vers soi, pattes vers le bas) : Émetteur (gauche) — Base (milieu) — Collecteur (droite).
 
+> ⚠️ **Moteur (+) sur 3V3, PAS sur VUSB.** Les pastilles `3V3` / `GND` / `VUSB` se suivent
+> sur la même colonne. Un moteur soudé par erreur sur VUSB vibre parfaitement sur USB et
+> reste **totalement muet sur batterie** (VUSB = 0 V sans câble) — tout le reste (LED, BLE,
+> bouton) continuant de fonctionner, le défaut passe pour un bug firmware.
+> Vérification : sur batterie, USB débranché, mesurer moteur (+) → GND = **~3,3 V**.
+
 **Câblage bouton (D1) :**
 
 ```
