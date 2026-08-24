@@ -23,8 +23,10 @@ bool ringing = false;
 static bool          ledAlert          = false;  // bracelet signale que cette balise est hors-rayon
 static bool          ringAcked         = false;  // utilisateur a acquitté la sonnerie en cours
 static unsigned long scannerLastSeenMs = 0;       // ts du dernier paquet KC-Scanner reçu
-static bool          tagLastBtnState   = HIGH;
-static unsigned long tagLastBtnChangeMs = 0;
+static bool          tagBtnState       = HIGH;  // état debouncé
+static unsigned long tagBtnChangeMs    = 0;
+static unsigned long tagBtnPressMs     = 0;     // début de l'appui en cours
+static bool          tagBtnTicked      = false; // palier de reset déjà signalé
 static uint16_t ownTagCrc        = 0;
 static uint16_t pairedScannerCrc = 0;
 static bool     pendingAdvRebuild = false;
@@ -157,6 +159,17 @@ void onScannerFound(ble_gap_evt_adv_report_t* report) {
   }
 }
 
+// Motif sonore bloquant, pour les confirmations ponctuelles (appui long).
+// updateBuzzer() reprend la main au tour de boucle suivant.
+static void tagBeep(uint8_t count, uint16_t onMs, uint16_t offMs) {
+  for (uint8_t i = 0; i < count; i++) {
+    digitalWrite(PIN_BUZZER, HIGH);
+    delay(onMs);
+    digitalWrite(PIN_BUZZER, LOW);
+    if (i + 1 < count) delay(offMs);
+  }
+}
+
 void updateBuzzer() {
   if (!ringing || ringAcked) { digitalWrite(PIN_BUZZER, LOW); return; }
   // Bip-bip : 100 ms ON — 100 ms OFF — 100 ms ON — 700 ms silence (période 1 s)
@@ -244,16 +257,37 @@ void loop() {
     rebuildScanResponse(pairedScannerCrc);
   }
 
-  // Bouton : acquitter la sonnerie en cours
+  // Bouton : appui court = acquitter la sonnerie, appui long = oublier le bracelet.
+  // L'action se joue au RELACHEMENT, seule facon de distinguer court et maintenu.
   bool btnRaw = digitalRead(PIN_BUTTON);
   unsigned long now = millis();
-  if (btnRaw != tagLastBtnState && now - tagLastBtnChangeMs > BUTTON_DEBOUNCE_MS) {
-    tagLastBtnState   = btnRaw;
-    tagLastBtnChangeMs = now;
-    if (btnRaw == LOW && ringing && !ringAcked) {
+  if (btnRaw != tagBtnState && now - tagBtnChangeMs > BUTTON_DEBOUNCE_MS) {
+    tagBtnState    = btnRaw;
+    tagBtnChangeMs = now;
+    if (btnRaw == LOW) {                 // debut d'appui
+      tagBtnPressMs = now;
+      tagBtnTicked  = false;
+    } else if (now - tagBtnPressMs >= BUTTON_RESET_MS) {
+      // Oublier le bracelet appaire. La sauvegarde et la reconstruction de
+      // l'advertising sont faites par le bloc pendingAdvRebuild ci-dessus.
+      pairedScannerCrc  = 0;
+      ledAlert          = false;
+      ringing           = false;
+      ringAcked         = false;
+      scannerLastSeenMs = 0;
+      pendingAdvRebuild = true;
+      Serial.println("[btn tag] appairage efface");
+      tagBeep(5, 80, 120);
+    } else if (ringing && !ringAcked) {
       ringAcked = true;
       Serial.println("[btn tag] sonnerie acquittee");
     }
+  }
+
+  // Bip de repere au franchissement du palier : indique quand relacher
+  if (tagBtnState == LOW && !tagBtnTicked && now - tagBtnPressMs >= BUTTON_RESET_MS) {
+    tagBtnTicked = true;
+    tagBeep(1, 80, 0);
   }
 
   updateLed();

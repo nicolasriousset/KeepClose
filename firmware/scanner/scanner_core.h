@@ -251,6 +251,53 @@ void loadPairedBeacons(BeaconRegistry& registry) {
 }
 
 // ---------------------------------------------------------------------------
+// Retrait d'appairage
+// ---------------------------------------------------------------------------
+
+// Désappaire les balises que le bracelet ne détecte plus du tout : perdue,
+// batterie à plat, laissée ailleurs. Les balises captées sont conservées, même
+// hors périmètre — être hors du rayon n'est pas être perdu.
+//
+// Le critère est bien « non détectable » et non « en alerte » : une balise
+// jamais revue depuis le démarrage a tagCrc == 0, elle n'est donc jamais
+// désignée dans alertHash et un critère fondé sur l'alerte la manquerait
+// précisément dans le cas qui nous intéresse.
+//
+// Retourne le nombre de balises oubliées.
+int forgetUndetectedBeacons(BeaconRegistry& registry) {
+  int forgotten = 0;
+  for (int i = 0; i < registry.count; i++) {
+    BeaconInfo& b = registry.beacons[i];
+    if (!b.paired || b.isAlive()) continue;
+    Serial.print("[oubli] balise non detectee : ");
+    Serial.println(b.address);
+    b.paired         = false;
+    b.snoozed        = false;
+    b.pairingStartMs = 0;
+    forgotten++;
+  }
+  if (forgotten > 0) savePairedBeacons(registry);
+  return forgotten;
+}
+
+// Efface tous les appairages. Le registre est vidé : les balises alentour
+// seront redécouvertes au prochain paquet reçu, non appairées.
+// Les balises, elles, conservent leur propre appairage en flash — elles
+// l'écraseront au prochain contact d'appairage (cf. onScannerFound côté tag).
+int factoryResetPairings(BeaconRegistry& registry) {
+  int erased = 0;
+  for (int i = 0; i < registry.count; i++) {
+    if (registry.beacons[i].paired) erased++;
+    registry.beacons[i].paired = false;
+  }
+  savePairedBeacons(registry);
+  registry.count = 0;
+  Serial.print("[reset] appairages effaces : ");
+  Serial.println(erased);
+  return erased;
+}
+
+// ---------------------------------------------------------------------------
 // Appairage par proximité
 // ---------------------------------------------------------------------------
 

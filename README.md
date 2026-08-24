@@ -119,7 +119,12 @@ D2 ──── [Bouton] ──── GND
 | Vert | Appairée, bracelet à portée |
 | Rouge | Appairée, bracelet hors périmètre ou signal perdu |
 
-### Bouton bracelet (D1) — 3 comportements selon l'état
+### Bouton bracelet (D1)
+
+L'action dépend de la **durée** de l'appui, et se joue au **relâchement** — seule
+façon de distinguer un appui court d'un maintien.
+
+**Appui court** — 3 comportements selon l'état :
 
 | Situation | Action |
 |-----------|--------|
@@ -127,11 +132,36 @@ D2 ──── [Bouton] ──── GND
 | Moteur vibre (balise hors périmètre) | Snooze : moteur s'arrête. Reprend automatiquement à la prochaine sortie du périmètre après un retour dans le rayon |
 | Rien (balise à portée) | Démarre le ring : la balise appairée la plus proche sonne pendant 10 s |
 
+**Appuis longs** — retrait d'appairage :
+
+| Durée | Action | Repère pendant l'appui | Confirmation |
+|-------|--------|------------------------|--------------|
+| ≥ 3 s | Oublie les balises que le bracelet **ne détecte plus** (perdue, batterie à plat, restée ailleurs). Les balises captées sont conservées, même hors périmètre | 1 impulsion à 3 s | 2 impulsions longues (1 seule = rien à oublier) |
+| ≥ 10 s | Efface **tous** les appairages | 2 impulsions à 10 s | 5 impulsions courtes |
+
+L'impulsion de repère à chaque palier permet de savoir quand relâcher sans
+compter les secondes. L'alerte est suspendue tant que le bouton est maintenu,
+pour que les motifs restent lisibles.
+
+Le critère d'oubli est « non détectable », pas « en alerte » : une balise jamais
+revue depuis le démarrage a `tagCrc == 0` et n'est donc jamais désignée dans
+`alertHash` — un critère fondé sur l'alerte la manquerait précisément dans le cas
+qui nous intéresse.
+
+> Après un effacement, une balise laissée au contact du bracelet se ré-appaire
+> d'elle-même au bout de 3 s. Éloigner les balises avant de réinitialiser.
+
 ### Bouton balise (D2)
 
-| Situation | Action |
-|-----------|--------|
-| Buzzer en cours | Acquitte la sonnerie (buzzer s'arrête). Se réinitialise automatiquement quand le bracelet arrête de publier le ring |
+| Durée | Situation | Action |
+|-------|-----------|--------|
+| Court | Buzzer en cours | Acquitte la sonnerie (buzzer s'arrête). Se réinitialise automatiquement quand le bracelet arrête de publier le ring |
+| ≥ 10 s | — | Oublie le bracelet appairé. Bip de repère à 10 s, 5 bips de confirmation |
+
+L'appairage étant bidirectionnel, oublier une balise côté bracelet ne l'efface
+pas côté balise : si elle réapparaît, elle affichera rouge jusqu'à un
+ré-appairage au contact — qui fonctionne sans reset. L'appui long sur D2 sert à
+repartir d'un état propre sans re-flasher.
 
 ---
 

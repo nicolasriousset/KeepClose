@@ -36,3 +36,7 @@
 
 // Anti-rebond bouton (ms)
 #define BUTTON_DEBOUNCE_MS      50
+
+// Appui long sur le bouton de la balise : oublier le bracelet appairé (ms).
+// Un bip de repère est émis au franchissement du palier.
+#define BUTTON_RESET_MS         10000

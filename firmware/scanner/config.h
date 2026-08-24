@@ -35,3 +35,9 @@
 #define RING_DURATION_MS        10000
 // Anti-rebond bouton (ms)
 #define BUTTON_DEBOUNCE_MS      50
+
+// ── Appuis longs sur le bouton du bracelet ───────────────────────────────────
+// Une impulsion de repère est émise à chaque palier atteint : l'utilisateur
+// non-voyant doit savoir quand relâcher sans avoir à compter les secondes.
+#define BUTTON_FORGET_MS        3000   // oublier les balises non détectées
+#define BUTTON_RESET_MS         10000  // effacer tous les appairages
