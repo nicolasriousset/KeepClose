@@ -141,10 +141,7 @@ void onBLEDeviceDiscovered(ble_gap_evt_adv_report_t* report) {
   }
 
   if (b->paired) {
-    b->rssi    = rssi;
-    b->rssiEma = (b->rssiEma == 0.0f) ? (float)rssi
-                                       : RSSI_EMA_ALPHA * rssi + (1.0f - RSSI_EMA_ALPHA) * b->rssiEma;
-    b->distance = estimateDistance(b->rssiEma);
+    pushRssi(b, rssi);
   }
 }
 
@@ -194,6 +191,15 @@ void setup() {
   Serial.println(PAIRING_RSSI_THRESHOLD);
   Serial.print("  PAIRING_DURATION_MS    = ");
   Serial.println(PAIRING_DURATION_MS);
+  Serial.print("  Alerte hors perimetre  : < ");
+  Serial.print(ALERT_RSSI_ENTER);
+  Serial.print(" dBm (~");
+  Serial.print(estimateDistance(ALERT_RSSI_ENTER), 1);
+  Serial.print(" m), retour a < ");
+  Serial.print(ALERT_RSSI_EXIT);
+  Serial.print(" dBm (~");
+  Serial.print(estimateDistance(ALERT_RSSI_EXIT), 1);
+  Serial.println(" m)");
 }
 
 void loop() {
@@ -224,10 +230,10 @@ void loop() {
       if (registry.beacons[i].paired) sorted[pairedCount++] = &registry.beacons[i];
     for (int i = 1; i < pairedCount; i++) {
       BeaconInfo* key = sorted[i];
-      float keyDist = (key->isAlive() && key->distance >= 0) ? key->distance : 1e9f;
+      float keyDist = (key->isAlive() && key->hasRssi) ? key->distance : 1e9f;
       int j = i - 1;
       while (j >= 0) {
-        float jDist = (sorted[j]->isAlive() && sorted[j]->distance >= 0) ? sorted[j]->distance : 1e9f;
+        float jDist = (sorted[j]->isAlive() && sorted[j]->hasRssi) ? sorted[j]->distance : 1e9f;
         if (jDist <= keyDist) break;
         sorted[j + 1] = sorted[j];
         j--;
@@ -244,15 +250,20 @@ void loop() {
     Serial.print("  [");
     for (int i = 0; i < pairedCount; i++) {
       if (i > 0) Serial.print(", ");
-      if (sorted[i]->isAlive() && sorted[i]->distance >= 0) {
+      if (sorted[i]->isAlive() && sorted[i]->hasRssi) {
+        // Pour recalibrer : relever la colonne "med" a distance connue et stable
         Serial.print(sorted[i]->distance, 1);
         Serial.print("m ");
         Serial.print(sorted[i]->rssi);
-        Serial.print("dBm(");
+        Serial.print("dBm(med ");
+        Serial.print((int)sorted[i]->rssiMedian);
+        Serial.print(", ema ");
         Serial.print((int)sorted[i]->rssiEma);
-        Serial.print("ema)");
+        Serial.print(") ");
+        Serial.print(beaconOutOfRange(*sorted[i]) ? "HORS" : "dans");
+        Serial.print(" perimetre");
       } else {
-        Serial.print("hors portee");
+        Serial.print("hors portee BLE");
       }
     }
     Serial.println("]");

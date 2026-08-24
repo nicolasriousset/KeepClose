@@ -167,16 +167,75 @@ Une balise ne peut être appairée qu'à un seul bracelet à la fois.
 
 ### Estimation de distance (bracelet)
 
-Le bracelet estime la distance de chaque balise appairée via le RSSI :
+**La décision d'alerte se prend en dBm, pas en mètres.** Les deux sont
+équivalents (la conversion est monotone), mais une erreur de calibration est un
+simple décalage constant en dBm — corrigeable par une seule mesure terrain —
+alors qu'en mètres c'est une erreur multiplicative qui croît avec la distance.
+La distance affichée dans les logs n'est qu'indicative.
+
+**Modèle de propagation** (`common/config.h`) :
 
 ```
-distance = 10 ^ ((TX_POWER_AT_1M - rssiEma) / (10 × PATH_LOSS_N))
+RSSI(d) = RSSI_AT_1M − 10 × PATH_LOSS_N × log10(d)
 ```
 
-- `TX_POWER_AT_1M = -61 dBm` (calibré à 1 m)
-- `PATH_LOSS_N = 2.0` (espace libre)
-- EMA sur le RSSI : `alpha = 0.1` (lissage fort)
-- Hystérésis : passage rouge→vert à 45 cm, vert→rouge à 55 cm
+| Constante | Valeur | Signification |
+|-----------|--------|---------------|
+| `RSSI_AT_1M` | −72 dBm | RSSI **reçu** à 1 m — pas la puissance d'émission |
+| `PATH_LOSS_N` | 2.65 | Exposant de perte de trajet, mesuré en intérieur |
+
+> ⚠️ Ne pas reprendre les valeurs des tables iBeacon génériques (−59 / −61 dBm,
+> n = 2.0) : elles supposent une antenne externe en espace libre. Avec l'antenne
+> chip du XIAO et le corps de l'utilisateur, elles surestimaient la distance
+> d'un facteur ~3,5 — 3,25 m réels affichés 18 m.
+
+**Chaîne de filtrage** : médiane glissante sur 5 paquets → EMA (`alpha = 0.25`)
+→ hystérésis → confirmation sur 3 mesures consécutives. La médiane élimine les
+paquets aberrants dus aux trajets multiples ; la confirmation empêche qu'un
+creux de bruit isolé ne bascule l'alerte.
+
+**Seuils d'alerte** :
+
+| Constante | Valeur | Distance |
+|-----------|--------|----------|
+| `ALERT_RSSI_ENTER` | −80 dBm | vert → rouge au-delà de ≈ **2,0 m** |
+| `ALERT_RSSI_EXIT` | −76 dBm | rouge → vert en deçà de ≈ **1,4 m** |
+
+Latence d'alerte mesurée en simulation : 2,9 s à 6 paquets/s, 4,1 s à 3 paquets/s.
+
+#### Procédure de recalibrage
+
+À refaire après tout changement de boîtier, de puissance d'émission ou
+d'environnement — le modèle dépend autant du montage que de la physique.
+
+1. Ouvrir le moniteur série du bracelet (115200 bauds) et relever la colonne
+   `med` du heartbeat, seule valeur stable (le RSSI brut fluctue de ±3 dB) :
+
+   ```
+   [hb] t=120s  balises vues=1  appairees=1  [2.0m -80dBm(med -80, ema -80) dans perimetre]
+   ```
+
+2. Mesurer à **deux** distances écartées, balise immobile, bracelet porté au
+   poignet dans sa position d'usage — par exemple 0,5 m et 3 m. Attendre 10 s
+   de stabilisation à chaque point.
+
+3. Calculer :
+
+   ```
+   PATH_LOSS_N = (RSSI₁ − RSSI₂) / (10 × log10(d₂ / d₁))
+   RSSI_AT_1M  = RSSI₁ + 10 × PATH_LOSS_N × log10(d₁)
+   ```
+
+4. Reporter les deux constantes dans `common/config.h`, puis en déduire les
+   seuils pour la distance d'alerte souhaitée :
+
+   ```
+   ALERT_RSSI_ENTER = RSSI_AT_1M − 10 × PATH_LOSS_N × log10(d_alerte)
+   ALERT_RSSI_EXIT  = ALERT_RSSI_ENTER + 4        (bande d'hystérésis)
+   ```
+
+Le bracelet réaffiche ces seuils convertis en mètres au démarrage, ce qui permet
+de vérifier la cohérence du réglage sans calcul.
 
 La balise ne calcule pas de distance — elle réagit uniquement aux champs alertHash/ringHash publiés par le bracelet.
 

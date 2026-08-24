@@ -7,8 +7,8 @@
 // #define PROJECT_TIPOUCET
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Puissance TX du tag à 1 mètre (doit correspondre à la calibration du tag)
-#define TX_POWER_AT_1M          -61
+// RSSI_AT_1M / PATH_LOSS_N / ALERT_RSSI_* : voir common/config.h
+// (le modèle de propagation est commun, pas un réglage propre au bracelet)
 
 // Scan BLE
 #define SCAN_INTERVAL_MS        2000

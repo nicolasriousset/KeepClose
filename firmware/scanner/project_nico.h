@@ -29,18 +29,15 @@ static inline void setRgbLed(bool r, bool g, bool b) {
 // Rouge : au moins une balise appairée hors portée
 void nicoLedUpdate(BeaconRegistry& reg, bool pairingActive) {
   if (pairingActive) { setRgbLed(false, true, false); return; }
-  static bool prevOutOfRange = true;
   bool hasPaired = false, hasOutOfRange = false;
   for (int i = 0; i < reg.count; i++) {
     BeaconInfo& b = reg.beacons[i];
     if (!b.paired) continue;
     hasPaired = true;
-    // Hystérésis : seuil de retour au vert plus bas que seuil de passage au rouge
-    float thr = prevOutOfRange ? PROXIMITY_NEAR_DISTANCE_M : PROXIMITY_FAR_DISTANCE_M;
-    if (!b.isAlive() || b.rssiEma == 0.0f || b.distance > thr)
-      hasOutOfRange = true;
+    // L'hystérésis est portée par chaque balise (cf. beaconOutOfRange), pas par
+    // la LED : un état global fausserait le seuil dès la deuxième balise.
+    if (beaconOutOfRange(b)) hasOutOfRange = true;
   }
-  prevOutOfRange = hasPaired ? hasOutOfRange : true;
   static uint8_t lastState = 255;
   uint8_t state = hasOutOfRange ? 2 : hasPaired ? 1 : 0;
   if (state != lastState) {
@@ -62,9 +59,8 @@ uint16_t nicoComputeAlert(BeaconRegistry& reg) {
   for (int i = 0; i < reg.count; i++) {
     BeaconInfo& b = reg.beacons[i];
     if (!b.paired || b.tagCrc == 0) continue;
-    bool oor = !b.isAlive() || b.rssiEma == 0.0f || b.distance > PROXIMITY_FAR_DISTANCE_M;
-    if (!oor) continue;
-    float d = (b.isAlive() && b.distance >= 0.0f) ? b.distance : 1e9f;
+    if (!beaconOutOfRange(b)) continue;
+    float d = (b.isAlive() && b.hasRssi) ? b.distance : 1e9f;
     if (!alertBeacon || d < alertDist) { alertDist = d; alertBeacon = &b; }
   }
   return alertBeacon ? alertBeacon->tagCrc : 0;
@@ -90,19 +86,19 @@ void nicoLoop(BeaconRegistry& registry) {
   for (int i = 0; i < registry.count; i++) {
     BeaconInfo& b = registry.beacons[i];
     if (!b.paired || !b.snoozed) continue;
-    if (b.isAlive() && b.rssiEma != 0.0f && b.distance <= PROXIMITY_NEAR_DISTANCE_M) {
+    if (!beaconOutOfRange(b)) {
       b.snoozed = false;
       Serial.print("[btn] snooze leve : "); Serial.println(b.address);
     }
   }
 
   // ── Détection balises hors périmètre (hors-snooze) ──────────────────────────
+  // Pas de break : toutes les balises doivent voir leur hystérésis réévaluée
   bool shouldVibrate = false;
   for (int i = 0; i < registry.count; i++) {
     BeaconInfo& b = registry.beacons[i];
     if (!b.paired || b.snoozed) continue;
-    bool oor = !b.isAlive() || b.rssiEma == 0.0f || b.distance > PROXIMITY_FAR_DISTANCE_M;
-    if (oor) { shouldVibrate = true; break; }
+    if (beaconOutOfRange(b)) shouldVibrate = true;
   }
 
   // ── Lecture bouton avec anti-rebond ─────────────────────────────────────────
@@ -125,8 +121,7 @@ void nicoLoop(BeaconRegistry& registry) {
       for (int i = 0; i < registry.count; i++) {
         BeaconInfo& b = registry.beacons[i];
         if (!b.paired) continue;
-        bool oor = !b.isAlive() || b.rssiEma == 0.0f || b.distance > PROXIMITY_FAR_DISTANCE_M;
-        if (oor) { b.snoozed = true; Serial.print("[btn] snooze : "); Serial.println(b.address); }
+        if (beaconOutOfRange(b)) { b.snoozed = true; Serial.print("[btn] snooze : "); Serial.println(b.address); }
       }
       shouldVibrate = false;
     } else {
