@@ -197,11 +197,25 @@ bool beaconOutOfRange(BeaconInfo& b) {
 // Persistance des appairages en flash
 // ---------------------------------------------------------------------------
 
-// TODO: implémenter avec InternalFS (BSP Adafruit nRF52) ou FlashIAP (BSP Seeed/mbed)
-//       Format suggéré : fichier texte "/paired.txt", une adresse MAC par ligne.
+// Fichier texte "/paired.txt" sur InternalFS, une adresse MAC par ligne.
+
+// Ouvre en écrasant réellement le contenu précédent.
+//
+// Le BSP ouvre FILE_O_WRITE en LFS_O_RDWR|LFS_O_CREAT puis se place en fin de
+// fichier (Adafruit_LittleFS_File.cpp:73) : sans truncate explicite, chaque
+// sauvegarde s'ajoute aux précédentes. Les doublons étaient inoffensifs à la
+// relecture — findOrCreate déduplique par adresse — ce qui a masqué le
+// problème, mais un désappairage n'était jamais persisté : l'adresse retirée
+// restait présente en queue de fichier et revenait au redémarrage suivant.
+static bool openTruncated(File& f, const char* path) {
+  if (!f.open(path, FILE_O_WRITE)) return false;
+  f.truncate(0);
+  f.seek(0);
+  return true;
+}
 
 void savePairedBeacons(BeaconRegistry& registry) {
-  if (!_scannerFlashFile.open("/paired.txt", FILE_O_WRITE)) {
+  if (!openTruncated(_scannerFlashFile, "/paired.txt")) {
     Serial.println("[flash] savePairedBeacons — erreur ouverture");
     return;
   }

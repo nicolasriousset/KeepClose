@@ -49,8 +49,15 @@ void updateLed() {
   else                    setRgbLed(true,  false, false);
 }
 
+// Le BSP ouvre FILE_O_WRITE en LFS_O_RDWR|LFS_O_CREAT puis se place en fin de
+// fichier (Adafruit_LittleFS_File.cpp:73) : sans truncate, chaque sauvegarde
+// ajoutait 2 octets au lieu d'ecraser. Comme loadPairedScannerCrc ne lit que
+// les 2 PREMIERS octets, la balise repartait au redemarrage sur le tout premier
+// bracelet qu'elle avait connu — un re-appairage ne survivait jamais au reboot.
 void savePairedScannerCrc(uint16_t crc) {
   if (flashFile.open("/scanner.bin", FILE_O_WRITE)) {
+    flashFile.truncate(0);
+    flashFile.seek(0);
     flashFile.write((const uint8_t*)&crc, sizeof(crc));
     flashFile.close();
     Serial.print("[flash] CRC bracelet sauvegardé : 0x");
