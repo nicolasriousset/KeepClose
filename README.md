@@ -139,6 +139,25 @@ D2 ──── [Bouton] ──── GND
 
 ### Protocole BLE
 
+**Paramètres radio** — tous réglés explicitement, aucun défaut de bibliothèque :
+
+| Paramètre | Valeur | Défini dans |
+|-----------|--------|-------------|
+| Puissance TX (les deux appareils) | 0 dBm | `common/config.h` → `BLE_TX_POWER` |
+| Advertising balise | 150 ms, constant | `tag/config.h` → `ADV_INTERVAL_MS` |
+| Advertising bracelet | 300 ms | `scanner.ino` |
+| Scan (les deux appareils) | fenêtre 50 ms / intervalle 100 ms | `*.ino` |
+
+> ⚠️ `BLE_TX_POWER` conditionne toute la calibration de distance. Le modifier
+> décale tous les RSSI d'autant, et impose de reporter le décalage sur
+> `RSSI_AT_1M`, `ALERT_RSSI_ENTER`, `ALERT_RSSI_EXIT` et
+> `PAIRING_RSSI_THRESHOLD` — sans quoi le périmètre d'alerte change en silence.
+
+L'advertising de la balise utilise un intervalle **unique** (`fast == slow`)
+plutôt que le découpage 20 ms / 152,5 ms par défaut du BSP : le bracelet en tire
+son débit de mesures, et un débit variable rendrait sa latence d'alerte
+imprévisible. À 150 ms, le bracelet capte ~3,3 paquets/s et alerte en ~3,9 s.
+
 Le bracelet advertise en continu (`KC-Scanner`, 300 ms).
 Son paquet **manufacturer data** contient :
 
@@ -243,6 +262,32 @@ La balise ne calcule pas de distance — elle réagit uniquement aux champs aler
 
 Le bracelet peut gérer jusqu'à 10 balises appairées simultanément.
 Règle d'alerte : parmi les balises hors périmètre, le bracelet publie le CRC de la **plus proche** dans alertHash. L'utilisateur la récupère en premier, puis le bracelet passe à la suivante.
+
+### Consommation — écart avec le budget prévu
+
+⚠️ **Point ouvert, non résolu.** Les autonomies annoncées dans les documents de
+conception (12-18 mois pour une balise, 7-10 jours pour le bracelet) supposaient
+une balise qui se contente d'advertiser (~8 µA) et un bracelet qui scanne à
+intervalle 1 s (~200 µA).
+
+Depuis le passage à la diffusion d'état par advertising, **les deux appareils
+scannent en permanence à 50 % de rapport cyclique** (fenêtre 50 ms / intervalle
+100 ms). Le récepteur radio du nRF52840 consomme ~4,6 mA :
+
+```
+Scan 50 % du temps          : ~2,3 mA
+Advertising 150 ms          : ~0,17 mA
+MCU + softdevice            : ~0,3-1 mA
+Total estimé                : ~3 mA
+Autonomie sur LiPo 200 mAh  : ~3 jours
+```
+
+Soit un facteur ~150 sur l'objectif balise. L'estimation vient des chiffres du
+datasheet et **reste à confirmer au multimètre**, en série sur la batterie.
+
+L'intervalle d'advertising n'est pas le levier : il pèse 5 % du budget. Le levier
+est le rapport cyclique du scan, mais le réduire ralentit d'autant la réaction de
+la balise à une commande ring — arbitrage produit à trancher, pas réglage.
 
 ### Structure des fichiers
 

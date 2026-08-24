@@ -168,6 +168,9 @@ void setup() {
   // Manufacturer data : [company_id(2) | alertHash(2) | ringHash(2)]
   // Les balises lisent ces champs pour connaître leur état LED et buzzer.
   Bluefruit.setName(SCANNER_LOCAL_NAME);
+  // Puissance TX explicite ici aussi : la balise mesure le RSSI du bracelet pour
+  // l'appairage au contact (PAIRING_RSSI_THRESHOLD), le seuil en depend.
+  Bluefruit.setTxPower(BLE_TX_POWER);
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
   Bluefruit.Advertising.addName();
   uint8_t mfr0[6] = {
@@ -187,6 +190,9 @@ void setup() {
   Serial.println("KeepClose v2 — Scanner pret");
   Serial.print("  Scan BLE demarre : ");
   Serial.println(scanOk ? "OK" : "ECHEC");
+  Serial.print("  TX power               = ");
+  Serial.print(BLE_TX_POWER);
+  Serial.println(" dBm");
   Serial.print("  PAIRING_RSSI_THRESHOLD = ");
   Serial.println(PAIRING_RSSI_THRESHOLD);
   Serial.print("  PAIRING_DURATION_MS    = ");

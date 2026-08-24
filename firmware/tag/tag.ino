@@ -179,7 +179,8 @@ void setup() {
   Bluefruit.Periph.setConnectCallback(onConnect);
   Bluefruit.Periph.setDisconnectCallback(onDisconnect);
   Bluefruit.setName(BEACON_LOCAL_NAME);
-  // TODO: configurer TX power (Bluefruit.setTxPower()) et ADV_INTERVAL_MS
+  // Puissance TX explicite : le bracelet calibre sa distance dessus (cf. RSSI_AT_1M)
+  Bluefruit.setTxPower(BLE_TX_POWER);
 
   // Declarer le service GATT ring
   ringService.begin();
@@ -206,6 +207,12 @@ void setup() {
     Bluefruit.ScanResponse.addManufacturerData(mfr, sizeof(mfr));
   }
   Bluefruit.ScanResponse.addName();
+  // Intervalle unique : setInterval(fast, slow) avec fast == slow, pour que le
+  // debit de paquets reste constant. Avec le decoupage par defaut du BSP
+  // (20 ms pendant 30 s puis 152,5 ms), chaque rebuild d'advertising — a chaque
+  // appairage — relancait une phase rapide, faisant varier le debit de mesures
+  // du bracelet et donc sa latence d'alerte.
+  Bluefruit.Advertising.setIntervalMS(ADV_INTERVAL_MS, ADV_INTERVAL_MS);
   Bluefruit.Advertising.start(0);    // advertise en continu
 
   // Scanner en parallele pour detecter KC-Scanner lors d'un appairage
@@ -215,6 +222,8 @@ void setup() {
   bool scanOk = Bluefruit.Scanner.start(0);
 
   Serial.println("Tag actif — advertising + scan KC-Scanner prets");
+  Serial.print("  TX power        : "); Serial.print(BLE_TX_POWER);   Serial.println(" dBm");
+  Serial.print("  Intervalle adv  : "); Serial.print(ADV_INTERVAL_MS); Serial.println(" ms");
   Serial.print("  Scan BLE demarre : ");
   Serial.println(scanOk ? "OK" : "ECHEC");
   Serial.print("  PAIRING_RSSI_THRESHOLD = ");

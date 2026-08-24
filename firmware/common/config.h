@@ -7,6 +7,20 @@
 // Seuil RSSI pour détecter un module "collé" (~5-8 cm)
 #define PAIRING_RSSI_THRESHOLD  -38
 
+// ── Puissance d'émission BLE ─────────────────────────────────────────────────
+// Réglée explicitement des deux côtés. C'était auparavant la valeur par défaut
+// du BSP (CFG_BLE_TX_POWER_LEVEL = 0 dBm) : identique, mais implicite — une mise
+// à jour du board package aurait décalé tous les RSSI sans prévenir.
+//
+// ⚠️ Toute modification décale les RSSI mesurés de la même quantité, en dB.
+//    Il faut alors reporter ce décalage sur RSSI_AT_1M, ALERT_RSSI_ENTER,
+//    ALERT_RSSI_EXIT et PAIRING_RSSI_THRESHOLD, sinon le périmètre d'alerte
+//    change silencieusement. Passer de 0 à +4 dBm, par exemple, impose
+//    RSSI_AT_1M = -68 pour conserver l'alerte à 2 m.
+//
+// Valeurs acceptées par le nRF52840 : -40 -20 -16 -12 -8 -4 0 2 3 4 5 6 7 8
+#define BLE_TX_POWER            0
+
 // Service GATT "ring" — commun à tous les tags
 #define RING_SERVICE_UUID       "12345678-1234-1234-1234-123456789ABC"
 #define RING_CMD_CHAR_UUID      "12345678-1234-1234-1234-123456789ABD"
