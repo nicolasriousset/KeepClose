@@ -79,19 +79,93 @@ Pas de résistance externe, pull-up interne activée par `INPUT_PULLUP`.
 
 | Broche | Composant | Notes |
 |--------|-----------|-------|
-| D1 | Buzzer actif 12 mm | Connexion directe |
+| D1 | Buzzer 12 mm | Connexion directe — actif ou passif, voir ci-dessous |
 | D2 | Bouton push | Actif bas, pull-up interne |
 | LED_RED / LED_GREEN / LED_BLUE | LED RGB intégrée | Tricolore |
 
-**Câblage buzzer actif (D1) :**
+**Câblage buzzer :**
 
 ```
-D1 ──── Buzzer (+)
-GND ─── Buzzer (-)
+Passif, push-pull (recommandé)      Actif, ou passif simple
+─────────────────────────────       ───────────────────────
+D1 ──── Buzzer                      D1 ──── Buzzer (+)
+D0 ──── Buzzer (autre borne)        GND ─── Buzzer (-)
 ```
 
-Utiliser un buzzer **actif** (avec marquage "+", ~12 mm) — pas un piézo passif.
-Le "+" sur D1, l'autre fil sur GND.
+Un piézo n'est pas polarisé : en push-pull les deux bornes sont équivalentes.
+Un buzzer **actif** l'est, lui — « + » sur D1, l'autre fil sur GND, et pas de
+push-pull.
+
+**Actif ou passif : le firmware doit le savoir.** Les deux composants se
+ressemblent mais se pilotent de façon incompatible, et `firmware/tag/config.h`
+doit être réglé en conséquence :
+
+| Type | Ce qu'il contient | Pilotage | Réglage `config.h` |
+|------|-------------------|----------|--------------------|
+| Actif | Un oscillateur intégré | Tension continue (`digitalWrite`) | `// #define BUZZER_PASSIVE` |
+| Passif | Un simple transducteur | PWM à sa résonance | `#define BUZZER_PASSIVE` |
+
+Le mauvais réglage ne donne pas « un son un peu faible » mais un symptôme franc :
+un **passif piloté en continu ne fait que « tic »** à chaque front, sans rien
+entre les deux. (Un actif piloté en PWM, lui, sonne quand même — sa propre note,
+un peu plus faible : moins visible, mais à corriger aussi.)
+
+En cas de doute, un croquis jetable tranche en 10 s : appliquer une tension
+continue 1 s (`digitalWrite(HIGH)`), puis balayer 1 → 5 kHz en carré. Un actif
+sonne dans les deux cas et sa note ne suit pas le balayage ; un passif ne fait
+que « tic » sous tension continue et joue la gamme au balayage. Le balayage
+relève au passage la **résonance** du passif, à reporter dans `BUZZER_FREQ_HZ` —
+ce n'est pas un détail de confort : hors résonance, un piézo perd 15 à 20 dB.
+
+### Volume
+
+Ce qui se règle en logiciel, dans l'ordre du gain obtenu :
+
+1. *La fréquence* (`BUZZER_FREQ_HZ`), **15 à 20 dB** entre le pic et le hors
+   résonance. Le plus gros levier, et le seul gratuit — à relever au balayage,
+   pas à deviner. Réglée à **2700 Hz**, retenu à l'oreille : un peu en deçà du
+   maximum, mais tenable près de l'oreille sur une sonnerie longue. Voir la mise
+   en garde dans `firmware/tag/config.h` avant de la remonter.
+2. *Le push-pull* (`BUZZER_PUSH_PULL`), **+6 dB**. L'élément est câblé entre D1
+   et D0 pilotées en opposition de phase : 6,6 Vpp au lieu de 3,3. Les deux
+   voies sortent de la même instance PWM, l'opposition est donc exacte par
+   construction. Attention au faux négatif dans les deux sens — buzzer resté sur
+   GND avec l'option active → volume inchangé ; buzzer entre D1 et D0 avec
+   l'option commentée → silence. **Pour trancher, piloter D0 seule**, D1 tenue à
+   0 : un piézo n'étant pas polarisé, ça ne peut sonner que si le fil a bien
+   quitté GND.
+3. *Le drive GPIO*, quelques dB. Déjà appliqué : `pinMode()` laisse la broche en
+   « standard drive » (~2 mA sous 0,4 V de chute), `buzzerHighDrive()` passe en
+   H0H1 (~5–9 mA).
+4. *L'évent.* Beaucoup de buzzers sont livrés avec un autocollant de protection
+   sur le trou : à retirer. Un boîtier fermé sans trou en face coûte une dizaine
+   de dB.
+
+**Le plafond, et pourquoi le logiciel n'ira pas plus loin.** Le SPL d'un piézo
+suit la tension à ses bornes. Un couloir bruyant, c'est 60–70 dB ambiants ; pour
+qu'une balise s'y entende nettement il faut de l'ordre de 85–90 dB à 1 m, soit
+~105 dB à 10 cm — la référence usuelle des fiches techniques, le SPL perdant 6 dB
+par doublement de distance. Un piézo alimenté en 3,3 V (6,6 en push-pull) est
+20 dB en dessous. Les quatre points ci-dessus optimisent le montage ; ils ne
+comblent pas cet écart. Il faut changer quelque chose au matériel :
+
+| Piste | Gain | Coût |
+|-------|------|------|
+| **Pastille nue → buzzer en boîtier** | 15–25 dB | le composant seul |
+| **Buzzer actif fort (≥ 95 dB à 10 cm) + transistor sur VBAT** | 20–30 dB | 1 transistor, 1 résistance, 1 diode |
+| **Self 10–33 mH en série + transistor** | 15–20 dB | 2 composants, et il faut régler l'accord |
+
+La première ligne est à vérifier avant tout achat : une **pastille de laiton nue**
+(le disque doré, sans habillage) n'a aucune cavité de résonance et se traîne 15 à
+25 dB sous un buzzer **en boîtier** (le cylindre noir percé d'un trou) de même
+diamètre. Passer de 12 à 15 mm ne change presque rien à côté de ça — le diamètre
+joue à la marge, la cavité joue tout.
+
+Pour un dispositif d'assistance, la deuxième ligne est la plus raisonnable : un
+buzzer **actif** fort ramène au pilotage `digitalWrite` (commenter
+`BUZZER_PASSIVE`), supprime la question de la résonance, et reprend le montage à
+transistor déjà utilisé pour le moteur du bracelet. La contrepartie est qu'on
+perd la maîtrise de la note émise.
 
 **Câblage bouton (D2) :**
 

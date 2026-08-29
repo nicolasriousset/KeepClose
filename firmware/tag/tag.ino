@@ -159,23 +159,101 @@ void onScannerFound(ble_gap_evt_adv_report_t* report) {
   }
 }
 
+// ── Pilotage du buzzer ───────────────────────────────────────────────────────
+// Le reste du fichier ne connaît que buzzerSet(true/false) ; le type de buzzer
+// (BUZZER_PASSIVE dans config.h) ne se voit que dans les deux implémentations
+// ci-dessous. Un passif piloté en continu ne fait que « tic » à chaque front.
+
+// pinMode() laisse la broche en « standard drive » (S0S1) : ~2 mA sous 0,4 V de
+// chute sur nRF52840, alors qu'un buzzer en réclame 10 à 30. « High drive »
+// (H0H1) monte à ~5–9 mA. À rappeler après tout pinMode(), qui réécrit PIN_CNF —
+// y compris celui que HardwarePWM::addPin() fait en interne.
+static void buzzerHighDrive(uint8_t arduinoPin) {
+  uint32_t p = g_ADigitalPinMap[arduinoPin];
+  NRF_GPIO_Type* port = (p < 32) ? NRF_P0 : NRF_P1;
+  uint32_t bit = p & 31;
+  port->PIN_CNF[bit] = (port->PIN_CNF[bit] & ~GPIO_PIN_CNF_DRIVE_Msk)
+                     | ((uint32_t)GPIO_PIN_CNF_DRIVE_H0H1 << GPIO_PIN_CNF_DRIVE_Pos);
+}
+
+#ifdef BUZZER_PASSIVE
+
+// PWM matérielle : le signal continue de sortir pendant que loop() scanne le
+// BLE. Un carré bit-bangé dans loop() serait modulé par le scan et donnerait un
+// son sale. HwPWM3 n'existe que sur nRF52840 et n'est jamais pris par
+// analogWrite() (qui pioche dans HwPWM0..2), donc pas de conflit possible.
+static const uint16_t BUZZER_TOP = 1000000UL / BUZZER_FREQ_HZ;  // période, en µs
+
+static void buzzerBegin() {
+  HwPWM3.setClockDiv(PWM_PRESCALER_PRESCALER_DIV_16);  // 16 MHz / 16 = 1 MHz → 1 tick = 1 µs
+  HwPWM3.setMaxValue(BUZZER_TOP);
+  HwPWM3.addPin(PIN_BUZZER);                           // fait le pinMode en interne
+  buzzerHighDrive(PIN_BUZZER);                         // ...donc high drive après, pas avant
+#ifdef BUZZER_PUSH_PULL
+  // Même instance PWM que PIN_BUZZER : les deux voies partagent le compteur et
+  // le COUNTERTOP, donc l'opposition de phase est exacte et le reste par
+  // construction. Deux instances séparées dériveraient l'une par rapport à
+  // l'autre et le gain s'effondrerait.
+  HwPWM3.addPin(PIN_BUZZER_N);
+  buzzerHighDrive(PIN_BUZZER_N);
+#endif
+  HwPWM3.stop();
+  digitalWrite(PIN_BUZZER, LOW);
+#ifdef BUZZER_PUSH_PULL
+  digitalWrite(PIN_BUZZER_N, LOW);
+#endif
+}
+
+static void buzzerSet(bool on) {
+  if (on) {
+    HwPWM3.writePin(PIN_BUZZER, BUZZER_TOP / 2);          // rapport cyclique 50 %
+#ifdef BUZZER_PUSH_PULL
+    HwPWM3.writePin(PIN_BUZZER_N, BUZZER_TOP / 2, true);  // même signal, phase opposée
+#endif
+  } else {
+    // stop() puis digitalWrite : couper la PWM laisse les broches dans leur
+    // dernier état, qui n'est pas forcément bas. Et un piézo laissé sous tension
+    // continue reste déformé — silencieux, mais il consomme et il vieillit.
+    // Les deux broches au même niveau, c'est 0 V aux bornes de l'élément.
+    HwPWM3.stop();
+    digitalWrite(PIN_BUZZER, LOW);
+#ifdef BUZZER_PUSH_PULL
+    digitalWrite(PIN_BUZZER_N, LOW);
+#endif
+  }
+}
+
+#else  // buzzer actif
+
+static void buzzerBegin() {
+  pinMode(PIN_BUZZER, OUTPUT);
+  buzzerHighDrive(PIN_BUZZER);
+  digitalWrite(PIN_BUZZER, LOW);
+}
+
+static void buzzerSet(bool on) {
+  digitalWrite(PIN_BUZZER, on ? HIGH : LOW);
+}
+
+#endif
+
 // Motif sonore bloquant, pour les confirmations ponctuelles (appui long).
 // updateBuzzer() reprend la main au tour de boucle suivant.
 static void tagBeep(uint8_t count, uint16_t onMs, uint16_t offMs) {
   for (uint8_t i = 0; i < count; i++) {
-    digitalWrite(PIN_BUZZER, HIGH);
+    buzzerSet(true);
     delay(onMs);
-    digitalWrite(PIN_BUZZER, LOW);
+    buzzerSet(false);
     if (i + 1 < count) delay(offMs);
   }
 }
 
 void updateBuzzer() {
-  if (!ringing || ringAcked) { digitalWrite(PIN_BUZZER, LOW); return; }
+  if (!ringing || ringAcked) { buzzerSet(false); return; }
   // Bip-bip : 100 ms ON — 100 ms OFF — 100 ms ON — 700 ms silence (période 1 s)
   unsigned long t = millis() % 1000UL;
   bool bip = (t < 100) || (t >= 200 && t < 300);
-  digitalWrite(PIN_BUZZER, bip ? HIGH : LOW);
+  buzzerSet(bip);
 }
 
 void setup() {
@@ -183,8 +261,7 @@ void setup() {
   unsigned long t = millis();
   while (!Serial && millis() - t < 3000);
 
-  pinMode(PIN_BUZZER, OUTPUT);
-  digitalWrite(PIN_BUZZER, LOW);
+  buzzerBegin();
   pinMode(PIN_BUTTON, INPUT_PULLUP);
   pinMode(LED_RED,   OUTPUT); digitalWrite(LED_RED,   HIGH);
   pinMode(LED_GREEN, OUTPUT); digitalWrite(LED_GREEN, HIGH);
