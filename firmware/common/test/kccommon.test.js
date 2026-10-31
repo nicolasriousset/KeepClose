@@ -213,6 +213,17 @@ test("sonnerie d'une balise appairée non vivante si aucune n'est vivante", () =
   assert.equal(b.tick(0).ringCrc, K.crc16(TAG_A));
 });
 
+test("nextAction annonce l'action sans l'exécuter, y compris après un snooze", () => {
+  const b = bracelet([TAG_A]);
+  const t = feed(b, TAG_A, 2, 0, 30);
+  assert.equal(b.nextAction(t), "snoozed");
+  assert.equal(b.nextAction(t), "snoozed");   // aucun effet de bord
+  b.action(t);
+  assert.equal(b.nextAction(t), "ring");      // alerte déjà en sourdine → la prochaine action sonne
+  b.action(t);
+  assert.equal(b.nextAction(t), "ringCancelled");
+});
+
 test("action sans balise appairée → noBeacon", () => {
   assert.equal(bracelet([]).action(0), "noBeacon");
 });

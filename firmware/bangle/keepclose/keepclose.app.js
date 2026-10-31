@@ -20,13 +20,10 @@ function flags(b) {
   return (b.ringing ? " SON" : "") + (b.snoozed ? " zZ" : "") + (b.reached ? " OK" : "");
 }
 
-function actionLabel() {
-  var s = KC.core.state;
-  if (!s.enabled) return "Desactive";
-  if (s.mode === "trail") return s.paused ? "Reprendre" : "Pause";
-  if (s.ringCrc) return "Arreter son";
-  return KC.status() === "out" ? "Silence" : "Sonner";
-}
+var LABELS = { disabled: "Desactive", paused: "Pause", resumed: "Reprendre", ringCancelled: "Stop son",
+               snoozed: "Silence", ring: "Sonner", noBeacon: "Aucune balise" };
+
+function actionLabel() { return LABELS[KC.core.nextAction(Date.now())]; }
 
 function draw() {
   if (inMenu) return;
@@ -49,8 +46,10 @@ function draw() {
   });
 
   g.setColor(g.theme.fg).fillRect(R.x + 4, ACTION_Y, R.x2 - 4, R.y2 - 4);
-  g.setColor(g.theme.bg).setFont("Vector", 26).setFontAlign(0, 0)
-    .drawString(actionLabel(), (R.x + R.x2) / 2, (ACTION_Y + R.y2) / 2);
+  var label = actionLabel();
+  g.setColor(g.theme.bg).setFont("Vector", 26);
+  if (g.stringWidth(label) > R.w - 16) g.setFont("Vector", 20);
+  g.setFontAlign(0, 0).drawString(label, (R.x + R.x2) / 2, (ACTION_Y + R.y2) / 2);
 }
 
 function act() { KC.action(); draw(); }

@@ -17,6 +17,7 @@
 - [x] 2.6 Implémenter la machine d'état Ti Poucet : désignation de la plus proche non atteinte, atteinte sous 1,0 m, fin de trajet, nouveau trajet, pause ; les tests reprennent les scénarios de la spec `trail-guidance`
 - [x] 2.7 Implémenter la machine d'état de la balise : adoption du propriétaire au contact, alerte, sonnerie seulement depuis le propriétaire, acquittement et réarmement, péremption à 6 s, couleur d'état ; les tests reprennent les specs `beacon-ring` (côté balise) et `beacon-indicators`
 - [x] 2.8 Écrire `firmware/tools/build.js`, qui copie `kccommon.js` dans l'app Bangle et produit `firmware/puck/dist/kc-tag.js` avec le module inliné ; vérifier que `node firmware/tools/build.js` régénère les fichiers à l'identique (pas de diff) et documenter la commande dans `firmware/README.md`
+- [x] 2.9 Faire tourner l'app Bangle et le firmware Puck généré dans l'interpréteur Espruino réel (émulateur du Web IDE) avec BLE, vibreur, LEDs, piézo et bouton interceptés ; vérifier que `firmware/tools/emulate-bangle.js` et `emulate-puck.js` passent et que leurs captures d'écran sont lisibles
 
 ## 3. Firmware balise Puck.js
 

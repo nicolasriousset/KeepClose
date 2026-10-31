@@ -15,7 +15,9 @@ context: |
   Modes : N.I.C.O. (alerte de sortie de périmètre) et Ti Poucet (guidage de balise en balise), choisis dans les réglages.
   Protocole : advertising uniquement, manufacturer data 0xFFFF + "KC" + type, identifiants CRC16 des adresses.
   Contraintes : autonomie (CR2032 côté balise), retours haptiques/sonores simples (utilisateurs malvoyants),
-  code compatible Espruino (pas de Map/Set, for...of, classes ; aucun appel bloquant).
+  code compatible Espruino (pas de Map/Set, for...of, classes ; aucun appel bloquant ; pas de hoisting
+  global : déclarer avant usage ; clearInterval/clearTimeout(undefined) efface TOUS les timers).
+  Vérification sans matériel : firmware/tools/emulate-bangle.js et emulate-puck.js (interpréteur Espruino réel).
   Ancien firmware Arduino XIAO nRF52840 archivé dans legacy/xiao-firmware/ (incompatible).
   Documentation utilisateur/technique : README.md, doc/. Planification BMad : _bmad-output/.
 

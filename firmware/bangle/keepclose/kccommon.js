@@ -266,30 +266,33 @@ exports.createBracelet = function (ownCrc, saved, emit) {
     },
 
     /*
-     * Action utilisateur unique. Retourne ce qui a été fait :
+     * Ce que ferait l'action utilisateur maintenant (sans l'exécuter) — sert aussi au libellé de l'app :
      *   "ringCancelled" | "snoozed" | "ring" | "noBeacon" | "paused" | "resumed" | "disabled"
      */
-    action: function (now) {
+    nextAction: function (now) {
       if (!s.enabled) return "disabled";
-      if (s.mode === "trail") {
-        s.paused = !s.paused;
-        persist();
-        return s.paused ? "paused" : "resumed";
-      }
-      if (ringActive(now)) { s.ringCrc = 0; return "ringCancelled"; }
+      if (s.mode === "trail") return s.paused ? "resumed" : "paused";
+      if (ringActive(now)) return "ringCancelled";
+      if (outOfRange(now, false).length) return "snoozed";
+      return pairedBeacons().length ? "ring" : "noBeacon";
+    },
 
-      var oor = outOfRange(now, false);
-      if (oor.length) {
-        oor.forEach(function (b) { s.snoozed[b.addr] = true; });
+    // Action utilisateur unique ; retourne ce qui a été fait (cf. nextAction)
+    action: function (now) {
+      var what = self.nextAction(now);
+      if (what === "paused" || what === "resumed") {
+        s.paused = what === "paused";
         persist();
-        return "snoozed";
+      } else if (what === "ringCancelled") {
+        s.ringCrc = 0;
+      } else if (what === "snoozed") {
+        outOfRange(now, false).forEach(function (b) { s.snoozed[b.addr] = true; });
+        persist();
+      } else if (what === "ring") {
+        s.ringCrc = nearest(pairedBeacons(), now).crc;
+        s.ringUntil = now + C.RING_MS;
       }
-
-      var target = nearest(pairedBeacons(), now);
-      if (!target) return "noBeacon";
-      s.ringCrc = target.crc;
-      s.ringUntil = now + C.RING_MS;
-      return "ring";
+      return what;
     },
 
     setMode: function (mode) {

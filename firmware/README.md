@@ -21,6 +21,22 @@ node firmware/tools/build.js                    # régénère les fichiers insta
 node firmware/tools/simulate-bangle.js          # simulation du code boot Bangle (API Espruino factices)
 ```
 
+### Exécution dans le vrai interpréteur Espruino
+
+`emulate-bangle.js` et `emulate-puck.js` font tourner l'app Bangle et le firmware balise **généré** dans l'interpréteur Espruino réel, compilé en JavaScript pour l'émulateur Bangle.js 2 du Web IDE. Le BLE, le vibreur, les LEDs, le piézo et le bouton sont interceptés. Ces scripts détectent les incompatibilités que Node ne voit pas : syntaxe, API, ordre d'exécution, mémoire. Ils rejouent aussi les scénarios des specs. Ils ne remplacent pas les essais sur le matériel.
+
+```sh
+git clone --depth 1 --filter=blob:none --sparse https://github.com/espruino/EspruinoWebIDE.git /chemin/EspruinoWebIDE
+(cd /chemin/EspruinoWebIDE && git sparse-checkout set emu)
+node firmware/tools/emulate-bangle.js /chemin/EspruinoWebIDE/emu   # EMU_SHOTS=<dossier> : captures d'écran
+node firmware/tools/emulate-puck.js  /chemin/EspruinoWebIDE/emu
+```
+
+Pièges Espruino rencontrés :
+
+- Au niveau global, les fonctions ne sont **pas hoistées** : il faut les déclarer avant de les utiliser.
+- `clearInterval()` et `clearTimeout()` appelés avec `undefined` **effacent tous les timers**. Il faut toujours tester la variable avant l'appel.
+
 `build.js` génère :
 
 - `bangle/keepclose/kccommon.js` : copie de `common/kccommon.js`, installée sur la montre comme module Storage `kccommon` ;

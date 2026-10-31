@@ -28,11 +28,11 @@ var STORE           = "kctag.json";
 var LEDS = { red: LED1, green: LED2, blue: LED3 };  // actives à l'état haut
 
 // ── État ─────────────────────────────────────────────────────────────────────
+// Espruino exécute le code au fil de l'eau (pas de hoisting global) : `tag` est créé dans start(),
+// une fois toutes les fonctions déclarées.
 var storage = require("Storage");
 var ownCrc  = KCC.crc16(NRF.getAddress());
-var saved   = storage.readJSON(STORE, 1) || {};
-var tag     = KCC.createTag(ownCrc, saved.owner || 0, onTagEvent);
-var beepTimer, piezoOn = false, cycles = 0;
+var tag, beepTimer, piezoOn = false, cycles = 0;
 
 function log() {
   if (NRF.getSecurityStatus().connected) console.log.apply(console, arguments);
@@ -111,6 +111,7 @@ function heartbeat() {
 
 // ── Démarrage ────────────────────────────────────────────────────────────────
 function start() {
+  tag = KCC.createTag(ownCrc, (storage.readJSON(STORE, 1) || {}).owner || 0, onTagEvent);
   digitalWrite(PIEZO_A, 0);
   digitalWrite(PIEZO_B, 0);
   setAdvertising();

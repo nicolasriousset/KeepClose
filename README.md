@@ -59,7 +59,9 @@ firmware/
 │   └── dist/kc-tag.js       # firmware balise à envoyer (généré)
 └── tools/
     ├── build.js             # génère les fichiers installables
-    └── simulate-bangle.js   # simulation du code boot Bangle sous Node
+    ├── simulate-bangle.js   # simulation du code boot Bangle sous Node
+    ├── emulate-bangle.js    # app Bangle dans l'interpréteur Espruino réel (émulateur)
+    └── emulate-puck.js      # firmware balise dans l'interpréteur Espruino réel
 ```
 
 ```sh
