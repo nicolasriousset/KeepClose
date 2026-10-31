@@ -1,0 +1,21 @@
+{
+  "id": "keepclose",
+  "name": "KeepClose",
+  "shortName": "KeepClose",
+  "version": "0.01",
+  "description": "Alerte quand un objet muni d'une balise Puck.js (canne blanche...) s'éloigne, et guidage de balise en balise (Ti Poucet).",
+  "icon": "app.png",
+  "type": "app",
+  "tags": "tool,bluetooth,outdoors",
+  "supports": ["BANGLEJS2"],
+  "allow_emulator": false,
+  "storage": [
+    { "name": "kccommon", "url": "kccommon.js" },
+    { "name": "keepclose.boot.js", "url": "keepclose.boot.js" },
+    { "name": "keepclose.wid.js", "url": "keepclose.wid.js" },
+    { "name": "keepclose.app.js", "url": "keepclose.app.js" },
+    { "name": "keepclose.settings.js", "url": "keepclose.settings.js" },
+    { "name": "keepclose.img", "url": "app-icon.js", "evaluate": true }
+  ],
+  "data": [{ "name": "keepclose.json" }]
+}

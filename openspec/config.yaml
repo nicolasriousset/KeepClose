@@ -5,13 +5,18 @@ context: |
   All artifacts must be written in fr.
   Keep OpenSpec structural headings and SHALL/MUST keywords in English.
 
-  Projet : KeepClose v2 — détection de proximité BLE pour personnes malvoyantes
+  Projet : KeepClose — détection de proximité BLE pour personnes malvoyantes
   (alerte si la canne blanche sort du périmètre).
-  Matériel : 2 × Seeed Studio XIAO BLE nRF52840 (bracelet « scanner » + « tag » balise), batterie LiPo.
-  Firmware Arduino (.ino / .h) : firmware/common, firmware/scanner, firmware/tag, firmware/test.
-  Variantes de build scanner : project_nico.h, project_tipoucet.h.
-  Contraintes : autonomie batterie, retours haptiques/sonores simples (utilisateurs malvoyants),
-  LEDs intégrées active LOW.
+  Matériel : bracelet Bangle.js 2 (montre, vibreur, écran tactile, 1 bouton réservé au système en arrière-plan)
+  + balises Puck.js (LEDs RGB actives à l'état haut, bouton, pile CR2032, piézo passif externe D1/D2).
+  Firmware Espruino (JavaScript) : logique pure partagée firmware/common/kccommon.js (tests Node),
+  app Bangle firmware/bangle/keepclose/ (boot/wid/app/settings), balise firmware/puck/kc-tag.js,
+  fichiers générés par firmware/tools/build.js (commités, build déterministe).
+  Modes : N.I.C.O. (alerte de sortie de périmètre) et Ti Poucet (guidage de balise en balise), choisis dans les réglages.
+  Protocole : advertising uniquement, manufacturer data 0xFFFF + "KC" + type, identifiants CRC16 des adresses.
+  Contraintes : autonomie (CR2032 côté balise), retours haptiques/sonores simples (utilisateurs malvoyants),
+  code compatible Espruino (pas de Map/Set, for...of, classes ; aucun appel bloquant).
+  Ancien firmware Arduino XIAO nRF52840 archivé dans legacy/xiao-firmware/ (incompatible).
   Documentation utilisateur/technique : README.md, doc/. Planification BMad : _bmad-output/.
 
 # Per-artifact rules (optional)
